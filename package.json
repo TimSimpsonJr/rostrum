@@ -1,0 +1,33 @@
+{
+  "name": "rostrum",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "helper": "node --experimental-strip-types helper/server.mjs",
+    "test": "node --experimental-strip-types --test \"helper/*.test.mjs\" \"hooks/*.test.mjs\" \"tools/*.test.mjs\" \"tools/review/*.test.mjs\" \"extension/*.test.mjs\" \"film/src/**/*.test.mjs\"",
+    "vendor": "node --experimental-strip-types tools/copy-vendor.mjs",
+    "clean-copy": "node --experimental-strip-types tools/prepare-recording.mjs",
+    "still": "node tools/render.mjs still",
+    "render": "node tools/render.mjs render",
+    "measure": "node tools/measure-boxes.mjs",
+    "stills": "node tools/stills.mjs",
+    "gestures": "node --experimental-strip-types tools/gestures.mjs",
+    "timing": "node --experimental-strip-types tools/make-timing.mjs",
+    "sweep": "node --experimental-strip-types tools/sweep.mjs",
+    "moves": "node --experimental-strip-types tools/moves.mjs",
+    "move": "node --experimental-strip-types tools/move-still.mjs"
+  },
+  "dependencies": {
+    "rrweb": "2.1.7",
+    "rrweb-snapshot": "2.1.7",
+    "@remotion/bundler": "4.0.532",
+    "@remotion/cli": "4.0.532",
+    "@remotion/renderer": "4.0.532",
+    "remotion": "4.0.532",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "lucide-static": "1.52.0"
+  }
+}

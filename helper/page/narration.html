@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rostrum</title>
+<link rel="stylesheet" href="/page/narration.css">
+</head>
+<body>
+<header>
+  <strong>Rostrum</strong>
+  <span id="title">Tutorial</span>
+  <span id="state" class="quiet"></span>
+  <a id="review" href="#">Review player</a>
+</header>
+<main>
+  <section>
+    <h1>Narration</h1>
+    <p id="stage" class="notice" hidden></p>
+
+    <h2>1. Copy the script</h2>
+    <ol id="lines"></ol>
+    <p id="no-script" class="quiet" hidden>There is no script yet. It is written and approved in the chat first.</p>
+    <p><button id="copy" type="button">Copy script</button> <span id="copied" class="quiet" role="status"></span></p>
+
+    <h2>2. Generate the voice</h2>
+    <p><a id="eleven" href="https://elevenlabs.io/app/speech-synthesis/text-to-speech" target="_blank" rel="noopener noreferrer">Open ElevenLabs text to speech</a></p>
+    <dl id="voice"></dl>
+    <p id="no-brand" class="quiet" hidden>No brand: use your own voice and settings.</p>
+
+    <h2>3. Add the audio file</h2>
+    <label id="drop" for="file">
+      <span>Drop the audio file here, or choose it</span>
+      <input id="file" type="file" accept="audio/*,.mp3,.wav,.m4a">
+    </label>
+    <p id="upload-status" class="quiet" role="status"></p>
+
+    <div id="result" hidden>
+      <h2>What was heard</h2>
+      <p id="verdict"></p>
+      <ul id="differs"></ul>
+      <p><button id="anyway" type="button" hidden>Use this take anyway</button></p>
+      <table id="timing" hidden>
+        <thead><tr><th>Line</th><th>Starts</th><th>Ends</th><th>Narration</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+<script src="/page/narration.js"></script>
+</body>
+</html>

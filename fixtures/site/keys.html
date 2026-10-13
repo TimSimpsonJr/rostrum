@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>API Keys - Fixture Admin</title>
+<script>if (new URLSearchParams(location.search).has('dark')) document.documentElement.classList.add('dark');</script>
+<style>
+  :root { --bg: #f4f5f7; --panel: #fff; --line: #d9dde3; --text: #1c2430; --muted: #5b6676; --link: #2456c9; --field: #fff; }
+  .dark { --bg: #12161c; --panel: #1b212a; --line: #2e3744; --text: #e8ecf1; --muted: #9aa6b5; --link: #8fb2ff; --field: #12161c; }
+  body { margin: 0; font: 15px/1.5 system-ui, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+  header { display: flex; gap: 24px; align-items: center; padding: 14px 32px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  header strong { font-size: 16px; }
+  header a { color: var(--link); text-decoration: none; }
+  main { max-width: 880px; margin: 28px auto; padding: 0 32px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 16px 20px; }
+  h1 { font-size: 20px; margin: 0 0 8px; }
+  .row { display: flex; align-items: center; gap: 16px; min-width: 300px; padding: 12px 0; border-top: 1px solid var(--line); }
+  .row .label { width: 180px; color: var(--muted); }
+  .row .value { flex: 1; font-family: ui-monospace, Consolas, monospace; }
+  button, input { font: inherit; color: var(--text); background: var(--field); border: 1px solid var(--line); border-radius: 4px; padding: 5px 12px; }
+  button { cursor: pointer; }
+</style>
+<link rel="stylesheet" href="ext.css">
+</head>
+<body>
+<header><strong>Fixture Admin</strong><a href="index.html">Companies</a><a href="keys.html">API Keys</a></header>
+<main>
+  <div class="card">
+    <h1>API Keys</h1>
+    <div class="row"><span class="label">Company API Key</span><span class="value">sk_test_FIXTURE_ONLY</span><button class="copy">Copy</button></div>
+    <div class="row"><span class="label">User API Key</span><span class="value">sk_test_FIXTURE_ONLY</span><button class="copy">Copy</button></div>
+    <div class="row"><label class="label" for="confirm">Confirm password</label><input id="confirm" type="password" placeholder="Required to rotate keys"></div>
+  </div>
+</main>
+</body>
+</html>

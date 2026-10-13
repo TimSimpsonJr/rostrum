@@ -1,0 +1,6 @@
+{
+  "name": "rostrum",
+  "owner": { "name": "Tim Simpson" },
+  "metadata": { "description": "Rostrum: record a narrated browser walkthrough and turn it into a video." },
+  "plugins": [{ "name": "rostrum", "source": "./", "description": "Record a narrated browser walkthrough and turn it into a video." }]
+}

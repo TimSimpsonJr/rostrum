@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "title": "Find your user API key",
+  "viewport": { "width": 2560, "height": 1351 },
+  "nodes": {
+    "userMenu": [2, 181],
+    "menu": [2, 191],
+    "profileItem": [2, 195],
+    "card": [7, 1151],
+    "firstName": [7, 1173],
+    "username": [7, 1224],
+    "viewKey": [7, 1241],
+    "dialog": [7, 1269],
+    "keyField": [7, 1289]
+  },
+  "beats": [
+    { "line": 0, "screen": 2, "frame": { "whole": true }, "cursor": "enter" },
+    { "line": 1, "screen": 2, "frame": { "target": "userMenu", "with": "corner" }, "cursor": "click", "target": "userMenu", "cue": "menu",
+      "then": [{ "cursor": "click", "target": "profileItem", "cue": "profile", "change": { "kind": "opens", "node": "menu", "after": "userMenu" } }] },
+    { "line": 2, "screen": 7, "frame": { "target": "card" }, "cursor": "rest", "target": "firstName", "cue": "name", "change": { "kind": "page" },
+      "then": [{ "cursor": "move", "target": "username", "cue": "username" }] },
+    { "line": 3, "screen": 7, "frame": { "target": "viewKey", "with": "row" }, "cursor": "click", "target": "viewKey", "cue": "api" },
+    { "line": 4, "screen": 7, "frame": { "target": "dialog" }, "change": { "kind": "opens", "node": "dialog", "after": "viewKey" } },
+    { "line": 5, "screen": 7, "frame": { "target": "keyField" }, "cursor": "click", "target": "keyField", "cue": "select", "change": { "kind": "selects", "node": "keyField" } },
+    { "line": 6, "cursor": "leave" }
+  ],
+  "chalk": []
+}

@@ -1,0 +1,120 @@
+/* The recorder popup, 360 x 464. Copied from the stage B style frames (docs/stage-b/mockups/mock.css and the motion
+   prototype button-motion.html): one design, two modes, following the system's light or dark. What changes over time
+   (the press, the count, the morph, the check) is drawn by popup.js; what differs by state is here, keyed on
+   main[data-state]. */
+@font-face { font-family: "Geist"; src: url("vendor/GeistVF.woff2") format("woff2"); font-weight: 100 900; font-style: normal; }
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root { --r-m: 10px; color-scheme: light dark; }
+
+body {
+  --surface: #FFFFFF; --sunk: #F0EEE6; --ink: #141413; --soft: #5E5D59; --faint: #87867F; --line: #E8E6DC; --accent: #1F6FEB;
+  --primary: #141413; --on-primary: #FAF9F5; --live: #D43D2F; --ctl: transparent; --raised: #FFFFFF; --warn: #B4540A;
+}
+@media (prefers-color-scheme: dark) {
+  body {
+    --surface: #30302E; --sunk: #1F1E1D; --ink: #FAF9F5; --soft: #C2C0B6; --faint: #9C9A92; --line: rgba(250, 249, 245, 0.1); --accent: #2C84FF;
+    --primary: #FAF9F5; --on-primary: #141413; --live: #E5533F; --ctl: rgba(250, 249, 245, 0.05); --raised: #3B3B38; --warn: #F0A24A;
+  }
+}
+
+html, body { width: 360px; height: 464px; overflow: hidden; }
+body { font-family: "Geist", ui-sans-serif, system-ui, sans-serif; font-size: 14px; line-height: 1.45; color: var(--ink); background: var(--surface); -webkit-font-smoothing: antialiased; font-feature-settings: "ss01"; }
+.num { font-variant-numeric: tabular-nums; }
+svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.sprite { position: absolute; width: 0; height: 0; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+button:disabled { cursor: default; }
+button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* buttons */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: var(--r-m); border: 1px solid var(--line); background: var(--ctl); color: var(--ink); font: 500 14px/1 "Geist", sans-serif; white-space: nowrap; }
+.btn.primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+.btn.sm { height: 32px; padding: 0 12px; font-size: 13px; border-radius: 8px; }
+.link { color: var(--ink); border-bottom: 1px solid var(--faint); }
+
+/* the popup */
+.pop { width: 360px; height: 464px; background: var(--surface); display: flex; flex-direction: column; overflow: hidden; }
+.pop-h { display: flex; align-items: center; justify-content: space-between; height: 48px; padding: 0 20px; border-bottom: 1px solid var(--line); flex: none; }
+.word { font-weight: 600; font-size: 15px; letter-spacing: -0.01em; }
+.pop-h .state { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--soft); }
+.pop-h .state.live { color: var(--ink); font-weight: 500; }
+.rec-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--live); }
+.pop-b { flex: 1; padding: 30px 20px 20px; display: flex; flex-direction: column; align-items: center; text-align: center; min-height: 0; }
+.pop .big { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; }
+.pop .timer { font-size: 46px; font-weight: 500; letter-spacing: -0.035em; line-height: 1; }
+.pop .timer.held { color: var(--faint); }
+.pop .sub { color: var(--soft); font-size: 14px; }
+.pop .sub.warn { color: var(--warn); font-weight: 500; }
+.pop .sub.warn.dim { color: var(--faint); font-weight: 400; } /* a page that can never be recorded: said quietly */ /* recording, but this page is not being captured */
+.pills { height: 46px; padding-top: 14px; flex: none; } /* the place of Pause, or Send to Rostrum; empty otherwise */
+.pop .pill { border-radius: 999px; padding: 0 14px 0 12px; gap: 7px; }
+.pop .pill svg { width: 14px; height: 14px; }
+.pop .pill i { width: 10px; height: 10px; border-radius: 2.5px; background: currentColor; }
+
+/* one place for each thing, whatever the state (the motion prototype's layout): the words under the control are
+   stacked in a slot and cross-faded, the foot is a fixed strip at the bottom */
+.slot { position: relative; width: 100%; height: 62px; }
+.slot > * { position: absolute; left: 0; right: 0; }
+.slot .big { top: 20px; }
+.slot .timer { top: 16px; }
+.subs { position: relative; width: 100%; height: 22px; margin-top: 6px; }
+main[data-state="paused"] .subs { height: 42px; } /* its line is two lines long */
+.subs .sub { position: absolute; left: 0; right: 0; margin: 0 auto; max-width: 290px; }
+.foot { position: relative; height: 66px; margin-top: auto; width: 100%; }
+.foot > * { position: absolute; left: 0; right: 0; bottom: 0; }
+.foot .btn { width: 100%; }
+.foot > .btn { bottom: 2px; }
+.foot .fine { font-size: 13px; color: var(--soft); margin-bottom: 14px; }
+.foot .quiet { font-size: 13px; color: var(--faint); }
+
+.wave { height: 36px; display: flex; align-items: center; gap: 3px; padding: 0 12px; background: var(--sunk); border-radius: var(--r-m); }
+.wave i { flex: 1; min-height: 2px; border-radius: 1px; background: var(--accent); }
+.wave.flat i { background: var(--faint); opacity: 0.7; }
+.meter-l { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 13px; color: var(--soft); height: 20px; }
+.meter-l b { color: var(--ink); font-weight: 500; white-space: nowrap; }
+.meter-l b.dim { color: var(--faint); font-weight: 400; }
+/* The microphone picker: a button that shows the device's name (cut with an ellipsis when long) and a chevron, and a
+   menu of the popup's own that opens above it, inside the popup, as wide as the meter strip. Live only in Ready. */
+.pick { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 210px; height: 20px; color: var(--soft); font-size: 13px; }
+.pick-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.pick svg { width: 14px; height: 14px; color: var(--soft); display: none; }
+main[data-state="ready"] .pick { color: var(--ink); }
+main[data-state="ready"] .pick svg { display: block; }
+.menu { position: absolute; left: 0; right: 0; bottom: 28px; z-index: 2; max-height: 204px; overflow-y: auto; padding: 4px; text-align: left;
+  background: var(--raised); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 28px -10px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.12); }
+.menu .row { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 6px 8px; border-radius: 6px; font-size: 13px; line-height: 1.3; color: var(--ink); cursor: pointer; outline: none; }
+.menu .row:hover, .menu .row:focus { background: var(--sunk); }
+.menu .row span { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.menu .row em { font-style: normal; color: var(--faint); }
+.menu .row svg { width: 14px; height: 14px; color: var(--ink); visibility: hidden; }
+.menu .row[aria-selected="true"] svg { visibility: visible; }
+
+/* The record control: a light-metal bezel, a dark recessed channel with one lit ring in it, a raised spun cap.
+   The same object in both modes; only the bezel is toned to the surface it sits on. --lit is the unlit ring's colour;
+   the lit ring (.glow.lit) is coloured and faded by popup.js. */
+.rec { --lit: #5A5954; --b1: #FFFFFF; --b2: #E3E0D6; --bedge: rgba(20, 20, 19, 0.16); --bdrop: rgba(20, 20, 19, 0.3); --c1: #F3F1EA; --c2: #DAD7CC; --c3: #E8E5DC;
+  display: block; position: relative; width: 144px; height: 144px; border-radius: 50%; flex: none; background: linear-gradient(180deg, var(--b1), var(--b2)); box-shadow: 0 0 0 1px var(--bedge), inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -1px 0 rgba(20, 20, 19, 0.08), 0 10px 18px -12px var(--bdrop); }
+.rec .chan { position: absolute; inset: 9px; border-radius: 50%; background: radial-gradient(circle, #2C2B29 50%, #1D1C1B 100%); box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(0, 0, 0, 0.4), 0 1px 0 rgba(255, 255, 255, 0.5); }
+@media (prefers-color-scheme: dark) {
+  .rec { --b1: #5C5B55; --b2: #403F3B; --bedge: rgba(0, 0, 0, 0.6); --bdrop: rgba(0, 0, 0, 0.6); --c1: #E6E3DA; --c2: #C8C5B9; --c3: #D8D5CA; box-shadow: 0 0 0 1px var(--bedge), inset 0 1px 0 rgba(250, 249, 245, 0.2), inset 0 -1px 0 rgba(0, 0, 0, 0.3), 0 10px 18px -12px var(--bdrop); }
+  .rec .chan { box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.7), inset 0 0 0 1px rgba(0, 0, 0, 0.5), 0 1px 0 rgba(250, 249, 245, 0.1); }
+}
+.rec .glow { position: absolute; inset: 19px; border-radius: 50%; }
+.rec .glow.lit { opacity: 0; }
+.rec .ring { position: absolute; inset: 0; border-radius: 50%; background: var(--lit); -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4.5px), #000 calc(100% - 4px)); mask: radial-gradient(farthest-side, transparent calc(100% - 4.5px), #000 calc(100% - 4px)); }
+.rec .cap { position: absolute; inset: 34px; border-radius: 50%; display: grid; place-items: center; color: #141413; will-change: transform;
+  background: conic-gradient(from 40deg, var(--c1), var(--c2) 12%, var(--c1) 25%, var(--c3) 37%, var(--c1) 50%, var(--c2) 62%, var(--c1) 75%, var(--c3) 87%, var(--c1));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -1px 0 rgba(20, 20, 19, 0.12), inset 0 0 0 1px rgba(20, 20, 19, 0.08), 0 4px 7px rgba(0, 0, 0, 0.5), 0 1px 1px rgba(0, 0, 0, 0.5); }
+.rec .cap svg { position: absolute; width: 26px; height: 26px; }
+.rec .cap svg.solid { fill: currentColor; stroke: none; margin-left: 3px; }
+.mk { position: relative; width: 24px; height: 24px; border-radius: 50%; transform: scale(0.9167); background: #1F1E1D; box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35), 0 1px 0 rgba(255, 255, 255, 0.8); }
+.tick { fill: none; stroke: #141413; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 24; stroke-dashoffset: 24; }
+
+/* ── by state ──
+   Which parts exist in a state is extension/state.mjs `shows`, applied by popup.js as the `hidden` attribute. A part
+   that is not of the state is not laid out at all: nothing invisible can sit over something else and take its clicks,
+   and nothing waits at opacity 0 to be drawn. */
+[hidden] { display: none !important; }
+/* not connected, microphone off: the control is unlit and cannot be pressed */
+main:is([data-state="loading"], [data-state="notConnected"], [data-state="micOff"]) .rec .cap { color: #87867F; filter: brightness(0.94); }

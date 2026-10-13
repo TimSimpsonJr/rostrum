@@ -1,0 +1,136 @@
+/* The review page. One design, two modes (it follows the system's light or dark), in the look of
+   docs/stage-b/mockups/review-*.html. The font is the film kit's own file, served by the helper: nothing from the network. */
+@font-face { font-family: "Geist"; src: url("/kit/GeistVF.woff2") format("woff2"); font-weight: 100 900; font-style: normal; }
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root { --r-s: 6px; --r-m: 10px; --r-l: 14px; color-scheme: light dark; }
+[hidden] { display: none !important; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+body {
+  --bg: #FAF9F5;
+  --surface: #FFFFFF;
+  --sunk: #F0EEE6;
+  --ink: #141413;
+  --soft: #5E5D59;
+  --faint: #87867F;
+  --line: #E8E6DC;
+  --accent: #1F6FEB;
+  --wash: rgba(20, 20, 19, 0.045);
+  --primary: #141413;
+  --on-primary: #FAF9F5;
+  --ctl: transparent;
+  --top: #FFFFFF;
+  --seg-on: #FFFFFF;
+  --seg-on-edge: 0 0 0 1px var(--line), 0 1px 2px rgba(20, 20, 19, 0.06);
+  --lift: 0 0 0 1px var(--line), 0 1px 2px rgba(20, 20, 19, 0.04), 0 24px 48px -20px rgba(20, 20, 19, 0.18);
+}
+@media (prefers-color-scheme: dark) {
+  body {
+    --bg: #262624; --surface: #30302E; --sunk: #1F1E1D; --ink: #FAF9F5; --soft: #C2C0B6; --faint: #9C9A92; --line: rgba(250, 249, 245, 0.1);
+    --wash: rgba(250, 249, 245, 0.05); --primary: #FAF9F5; --on-primary: #141413; --accent: #2C84FF;
+    --ctl: rgba(250, 249, 245, 0.05); --top: #262624; --seg-on: #3D3D3A; --seg-on-edge: none;
+    --lift: 0 0 0 1px var(--line);
+  }
+}
+
+body { font-family: "Geist", ui-sans-serif, system-ui, sans-serif; font-size: 14px; line-height: 1.45; color: var(--ink); background: var(--bg); -webkit-font-smoothing: antialiased; font-feature-settings: "ss01"; min-height: 100vh; }
+.num { font-variant-numeric: tabular-nums; }
+svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.sprite { position: absolute; width: 0; height: 0; }
+
+/* buttons */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: var(--r-m); border: 1px solid var(--line); background: var(--ctl); color: var(--ink); font: 500 14px/1 "Geist", sans-serif; white-space: nowrap; flex: none; }
+.btn.primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+.btn.sm { height: 32px; padding: 0 12px; font-size: 13px; border-radius: 8px; }
+
+/* top bar */
+.top { height: 68px; padding: 0 32px; display: flex; align-items: center; gap: 20px; border-bottom: 1px solid var(--line); background: var(--top); }
+.top h1 { font-size: 19px; font-weight: 600; letter-spacing: -0.015em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.top .meta { color: var(--soft); font-size: 14px; white-space: nowrap; }
+.top .sp { flex: 1; }
+
+.seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--sunk); border-radius: var(--r-m); flex: none; }
+.seg:empty { display: none; }
+.seg button { height: 30px; min-width: 44px; padding: 0 12px; display: inline-flex; align-items: center; justify-content: center; border-radius: 7px; font-size: 13.5px; font-weight: 500; color: var(--soft); }
+.seg button.on { background: var(--seg-on); color: var(--ink); box-shadow: var(--seg-on-edge); }
+
+/* the film and the notes. The film is as wide as leaves the timeline, the transport and the note box in the window. */
+.review { display: grid; grid-template-columns: minmax(0, max(480px, calc((100vh - 310px) * 16 / 9))) minmax(340px, 1fr); gap: 32px; padding: 28px 32px 0; height: calc(100vh - 69px); min-height: 560px; }
+.film { position: relative; width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: var(--r-m); overflow: hidden; box-shadow: var(--lift); background: var(--surface); }
+.film video { display: block; width: 100%; height: 100%; background: var(--surface); cursor: pointer; touch-action: none; }
+/* a note's selection: a thin rectangle, the rest of the picture a little dimmed; there only while its note is open */
+.film { user-select: none; -webkit-user-select: none; }
+#area { position: absolute; border: 1.5px solid var(--accent); border-radius: 2px; box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.3); pointer-events: none; }
+#area button { position: absolute; top: 0; right: 0; width: 22px; height: 22px; border-radius: 0 0 0 var(--r-s); background: var(--accent); color: #fff; font-size: 16px; line-height: 20px; pointer-events: auto; }
+#area.drawing button { display: none; }
+#film-msg { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--soft); font-size: 15px; background: var(--surface); }
+
+.tl { position: relative; height: 46px; margin-top: 18px; cursor: pointer; touch-action: none; }
+.tl .track { position: absolute; left: 0; right: 0; bottom: 6px; height: 4px; border-radius: 2px; background: var(--line); }
+.tl .fill { position: absolute; left: 0; bottom: 6px; height: 4px; border-radius: 2px; background: var(--accent); }
+.tl .head { position: absolute; bottom: 0; width: 16px; height: 16px; margin-left: -8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px var(--bg); pointer-events: none; }
+.pin { position: absolute; top: 0; width: 22px; height: 22px; margin-left: -11px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 600; line-height: 1; background: var(--ink); color: var(--bg); }
+.pin::after { content: ""; position: absolute; top: 22px; left: 10px; width: 2px; height: 12px; background: var(--ink); }
+.pin.quiet { background: var(--bg); color: var(--soft); box-shadow: inset 0 0 0 1.5px var(--faint); }
+.pin.quiet::after { background: var(--faint); }
+
+.transport { display: flex; align-items: center; gap: 14px; margin-top: 12px; height: 36px; }
+.transport .play { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--primary); color: var(--on-primary); flex: none; }
+.transport .play svg { fill: currentColor; stroke: none; width: 14px; height: 14px; }
+.transport .time { font-size: 15px; font-weight: 500; }
+.transport .time #dur { color: var(--soft); font-weight: 400; }
+.transport .sp { flex: 1; }
+.transport .ico { color: var(--soft); display: inline-flex; }
+.transport .ico:hover { color: var(--ink); }
+.transport .ico svg { width: 18px; height: 18px; }
+.transport .ico[aria-pressed="true"] { opacity: 0.45; }
+.transport input[type="range"] { width: 84px; accent-color: var(--soft); cursor: pointer; }
+
+.compose { display: flex; align-items: center; gap: 12px; margin-top: 18px; height: 52px; padding: 0 8px 0 16px; border-radius: var(--r-m); background: var(--surface); box-shadow: 0 0 0 1.5px var(--accent); }
+.compose .at { font-weight: 600; font-size: 15px; }
+.compose .txt { flex: 1; min-width: 0; font: inherit; font-size: 15px; background: none; border: 0; color: var(--ink); outline: none; }
+.compose .txt::placeholder { color: var(--faint); }
+
+.notes { display: flex; flex-direction: column; min-height: 0; max-width: 560px; }
+.notes-h { display: flex; align-items: baseline; justify-content: space-between; padding-bottom: 14px; }
+.notes-h h2 { font-size: 16px; font-weight: 600; }
+.notes-h span { color: var(--soft); font-size: 13.5px; }
+#list { list-style: none; flex: 1; min-height: 0; overflow-y: auto; margin: 0 -16px; padding: 0 16px; }
+.note { list-style: none; display: grid; grid-template-columns: 22px 1fr; column-gap: 14px; padding: 18px 16px; margin: 0 -16px; border-top: 1px solid var(--line); }
+.note.on { background: var(--wash); border-radius: var(--r-m); border-top-color: transparent; }
+.note.on + .note { border-top-color: transparent; }
+.note .pin { position: static; margin: 1px 0 0; }
+.note .pin::after { display: none; }
+.note-h { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.note-h .t { font-weight: 600; font-size: 15px; }
+.note-h .st { font-size: 13px; color: var(--soft); display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.note-h .st { margin-left: auto; }
+/* a note that has a selection says so, quietly: four corners beside its time, one corner on its pin */
+.note-h .has-area { display: inline-flex; align-self: center; color: var(--faint); }
+.note-h .has-area svg { width: 14px; height: 14px; }
+.tl .pin.area::before { content: ""; position: absolute; top: -4px; right: -4px; width: 7px; height: 7px; border: solid var(--faint); border-width: 1.5px 1.5px 0 0; border-radius: 0 2px 0 0; }
+/* the open note's own controls, and its text as a field while it is edited */
+.note .acts, .note .edit { display: flex; align-items: baseline; gap: 14px; margin-top: 10px; font-size: 13px; color: var(--soft); }
+.note .acts button:hover, .note .edit button:hover { text-decoration: underline; }
+.note .acts .ask { color: var(--ink); }
+.note .go { color: var(--ink); font-weight: 500; }
+.note .edit { align-items: center; margin-top: 6px; }
+.note .edit-txt { flex: 1; min-width: 0; height: 34px; padding: 0 10px; font: inherit; font-size: 15px; color: var(--ink); background: var(--surface); border: 0; border-radius: var(--r-s); box-shadow: 0 0 0 1.5px var(--accent); outline: none; }
+.note-h .st svg { width: 14px; height: 14px; align-self: center; }
+.note-h .st.open { color: var(--ink); font-weight: 500; cursor: default; }
+.note-h .st:not(.open):hover { text-decoration: underline; }
+.note .say { font-size: 15px; margin-top: 4px; line-height: 1.4; overflow-wrap: anywhere; }
+.note .reply { margin-top: 10px; padding-left: 14px; border-left: 2px solid var(--line); color: var(--soft); font-size: 14px; overflow-wrap: anywhere; }
+.note .reply b { color: var(--ink); font-weight: 500; margin-right: 4px; }
+.notes-foot { margin-top: auto; padding: 16px 0 28px; color: var(--soft); font-size: 13.5px; border-top: 1px solid var(--line); }
+
+/* a narrow window: the notes go under the film */
+@media (max-width: 900px) {
+  .top { padding: 0 16px; gap: 12px; }
+  .top #built { display: none; }
+  .review { grid-template-columns: minmax(0, 1fr); height: auto; padding: 16px 16px 0; }
+  .notes { max-width: none; }
+  #list { overflow: visible; }
+}

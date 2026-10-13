@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Rostrum",
+  "version": "0.2.0",
+  "description": "Records a narrated walkthrough of the tabs you use, for the Rostrum helper on this computer.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqDZ+JNKmBIAd+dr67t3OBA3Nicbu4+LSEPrR7rFoN2tdsAFeJzq+62deRDQBgRpnBP4CJXe/guWXkWuh1UtFpKF2TpnY5YmCN3zEHn2HnkFgvebO8x3ovwyAvDOCt+b1GVPtm6N3VzbGvbLPjLzuNBXNHKawYB2gtDIIF1V+kRtgLkOUjBTVZrybv2TzbrfyRVwlrFyxxqkhR0XP6ozyabbJd5e2wf2iOxRIDd/ULI6J32CMYTnRGrh6V2LbeIwiL6WZxG6OmM9zZATOeRWKKXg9GIybONr7j3OE0GJTpxV3jWHcbU8/KtRe5kg1P9D6tuUVYUd+o4PzuQboVspiRwIDAQAB",
+  "permissions": ["storage", "tabs", "scripting", "alarms"],
+  "host_permissions": ["<all_urls>"],
+  "icons": { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png" },
+  "action": { "default_popup": "popup.html", "default_icon": { "16": "icons/icon-16.png", "32": "icons/icon-32.png" } },
+  "background": { "service_worker": "worker.js", "type": "module" },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["bridge.js"],
+      "run_at": "document_start"
+    }
+  ]
+}

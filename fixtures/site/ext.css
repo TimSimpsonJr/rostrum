@@ -1,0 +1,4 @@
+/* External stylesheet and font file, so the recorder has assets to collect. dummy.woff2 is not a real font:
+   the browser fetches it, cannot decode it and falls back to system-ui, so the page looks the same. */
+@font-face { font-family: "Fixture Dummy"; src: url("dummy.woff2") format("woff2"); }
+h1 { font-family: "Fixture Dummy", system-ui, "Segoe UI", sans-serif; }

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fixture Admin</title>
+<style>
+  body { margin: 0; font: 15px/1.5 system-ui, "Segoe UI", sans-serif; background: #f4f5f7; color: #1c2430; }
+  header { display: flex; gap: 24px; align-items: center; padding: 14px 32px; background: #fff; border-bottom: 1px solid #d9dde3; }
+  header strong { font-size: 16px; }
+  header a { color: #2456c9; text-decoration: none; }
+  main { max-width: 880px; margin: 28px auto; padding: 0 32px; }
+  h1 { font-size: 24px; margin: 0 0 16px; }
+  .card { background: #fff; border: 1px solid #d9dde3; border-radius: 6px; padding: 16px 20px; margin-bottom: 20px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #e6e9ee; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #5b6676; }
+  tbody tr:hover { background: #f0f4fb; cursor: pointer; }
+</style>
+</head>
+<body>
+<header><strong>Fixture Admin</strong><a href="index.html">Companies</a><a href="keys.html">API Keys</a></header>
+<main>
+  <h1>Companies</h1>
+  <div class="card">
+    <table>
+      <thead><tr><th>Company</th><th>Status</th><th>Payments this month</th></tr></thead>
+      <tbody>
+        <tr><td>Alder &amp; Finch Supply</td><td>Active</td><td>128</td></tr>
+        <tr><td>Marrow Lake Freight</td><td>Active</td><td>74</td></tr>
+        <tr><td>Quillon Roofing Co.</td><td>Paused</td><td>19</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="card">
+    <h2 style="font-size:16px;margin:0 0 12px">Payments by company</h2>
+    <canvas id="chart" width="400" height="180"></canvas>
+  </div>
+</main>
+<script>
+  const ctx = document.getElementById('chart').getContext('2d');
+  [128, 74, 19].forEach((v, i) => {
+    ctx.fillStyle = ['#2456c9', '#3f8f6b', '#c98a24'][i];
+    ctx.fillRect(30 + i * 120, 170 - v, 80, v);
+  });
+</script>
+</body>
+</html>

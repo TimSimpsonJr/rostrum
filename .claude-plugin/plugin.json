@@ -1,0 +1,9 @@
+{
+  "name": "rostrum",
+  "version": "0.2.0",
+  "description": "Record a narrated browser walkthrough and rebuild it as a short tutorial film.",
+  "author": { "name": "Tim Simpson" },
+  "repository": "https://github.com/TimSimpsonJr/rostrum",
+  "license": "MIT",
+  "types": "./types/index.d.ts"
+}

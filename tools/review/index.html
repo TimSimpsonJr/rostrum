@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rostrum review</title>
+<link rel="stylesheet" href="review.css">
+</head>
+<body>
+<!-- the icons' ids are prefixed: getElementById finds the first match in the page, and this sprite comes first -->
+<svg class="sprite" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><rect x="14" y="3" width="5" height="18" rx="1"/><rect x="5" y="3" width="5" height="18" rx="1"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-area" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/></symbol>
+  <symbol id="i-vol" viewBox="0 0 24 24"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19.364 18.364a9 9 0 0 0 0-12.728"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M13.971 4.285A2 2 0 0 1 17 6v12a2 2 0 0 1-3.029 1.715l-9.997-5.998a2 2 0 0 1-.003-3.432z"/><path d="M21 20V4"/></symbol>
+  <symbol id="i-fwd" viewBox="0 0 24 24"><path d="M10.029 4.285A2 2 0 0 0 7 6v12a2 2 0 0 0 3.029 1.715l9.997-5.998a2 2 0 0 0 .003-3.432z"/><path d="M3 4v16"/></symbol>
+</svg>
+<header class="top">
+  <h1 id="title">Rostrum review</h1>
+  <div class="seg" id="versions" role="tablist" aria-label="Version"></div>
+  <span class="meta num" id="built"></span>
+  <span class="sp"></span>
+  <span class="meta" id="said" role="status" aria-live="polite"></span>
+  <span class="meta" id="approved" hidden>Approved</span>
+  <button type="button" class="btn" id="approve">Approve</button>
+  <button type="button" class="btn primary" id="send">Send notes to Claude</button>
+</header>
+<div class="review">
+  <div>
+    <div class="film"><video id="video" preload="metadata" playsinline disableremoteplayback x-webkit-airplay="deny"></video><div id="area" hidden><button type="button" id="area-x" aria-label="Remove the selection">&times;</button></div><p id="film-msg" hidden></p></div>
+    <div class="tl" id="timeline" role="slider" tabindex="0" aria-label="Seek" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+      <div class="track"></div><div class="fill" id="fill"></div><div id="pins"></div><span class="head" id="head"></span>
+    </div>
+    <div class="transport">
+      <button type="button" class="play" id="play" aria-label="Play"><svg class="i"><use href="#i-play"/></svg></button>
+      <span class="time num"><span id="tc">0:00</span> <span id="dur">/ 0:00</span></span>
+      <span class="sp"></span>
+      <button type="button" class="ico" id="back1" aria-label="Back one frame"><svg class="i"><use href="#i-back"/></svg></button>
+      <button type="button" class="ico" id="fwd1" aria-label="Forward one frame"><svg class="i"><use href="#i-fwd"/></svg></button>
+      <button type="button" class="ico" id="mute" aria-label="Sound" aria-pressed="false"><svg class="i"><use href="#i-vol"/></svg></button>
+      <input type="range" id="volume" min="0" max="1" step="0.05" value="1" aria-label="Volume">
+    </div>
+    <form class="compose" id="compose">
+      <span class="at num" id="at">0:00</span>
+      <input class="txt" id="text" maxlength="5000" placeholder="Pause anywhere and type" aria-label="Note" autocomplete="off">
+      <button type="submit" class="btn primary sm" id="add">Add note</button>
+    </form>
+  </div>
+  <aside class="notes">
+    <div class="notes-h"><h2>Notes</h2><span id="counts">No notes yet</span></div>
+    <ol id="list"></ol>
+    <div class="notes-foot">Pause anywhere and type. The note is pinned to that moment.</div>
+  </aside>
+</div>
+<script type="module" src="review.js"></script>
+</body>
+</html>
