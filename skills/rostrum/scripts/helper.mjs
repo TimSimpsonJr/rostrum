@@ -6,6 +6,7 @@
 //   node helper.mjs post <path> [<json> | @<file>]     any POST route; the body inline or from a file
 //   node helper.mjs put <path> [<json> | @<file>]
 //   node helper.mjs event <id> <event> [title...]      scripted (with the title) | approved | editScript | revoice | notes | reviewed | retry
+//                                                      (with a title: the folder is renamed after it; the new path is printed)
 //   node helper.mjs brand <id> [name | none]           set the tutorial's brand (optional), then copy the resolved brand into its film
 //   node helper.mjs wait <id> [seconds]              until no stage is running on the tutorial; exit 1 on an error
 //   node helper.mjs run <id> <stage> [<json> | @<file>]   start prepare | rules | measure | stills | sweep | render | time, and wait for it
@@ -20,7 +21,9 @@
 //   node helper.mjs reply <id> <noteId> <open|done|wontfix> <text... | @file>   done also says which render fixed it
 //   node helper.mjs progress <id> <phase> [--pass n] [--fraction f] [--note words...]   where the build is, for the panel's bar: making (new pieces being made in chat, before staging; give a --note) | shotlist | measure | staging | checking (--pass 1..3) | sweep | render (--fraction 0..1)
 //   node helper.mjs progress <id> clear                the build stopped before its render: take the bar away
-//   node helper.mjs rename <id> <title words...>
+//   node helper.mjs rename <id> <title words...>      the folder is renamed after the title too (the id stays); prints its path
+// An id is the recording's name and never changes; a titled tutorial's folder is named after its title, so a folder
+// is always taken from the helper (`get tutorials/<id>` gives `dir`), never built from the id.
 //   node helper.mjs archive <id>                       hidden from the panel; nothing is lost
 //   node helper.mjs reopen <id>                        an archived or finished tutorial back in the panel (a finished one as approved)
 //   node helper.mjs delete <id>                        the tutorial's folder, whole, into Rostrum's trash (nothing is removed)
@@ -101,6 +104,7 @@ else if (cmd === 'event') {
   const r = await call('POST', `tutorials/${id}/state`, { event, ...(title.length ? { title: title.join(' ') } : {}) });
   if (r.code !== 200) fail(`${r.code} ${r.json?.error ?? r.text}`);
   out(one(r.json));
+  out(`folder: ${r.json.dir}`);
 } else if (cmd === 'brand') {
   // with a name: sets the tutorial's brand first ("none" clears it). Then copies the resolved brand into film/brand/.
   const [id, name] = args;
@@ -194,7 +198,7 @@ else if (cmd === 'reply') {
   const [id, ...title] = args;
   const r = await call('POST', `tutorials/${id}/state`, { title: title.join(' ') });
   if (r.code !== 200) fail(`${r.code} ${r.json?.error ?? r.text}`);
-  out(`${r.json.id}: "${r.json.title}"`);
+  out(`${r.json.id}: "${r.json.title}"\nfolder: ${r.json.dir}`);
 } else if (cmd === 'delete') {
   const r = await call('DELETE', `tutorials/${args[0]}`);
   if (r.code !== 200) fail(`${r.code} ${r.json?.error ?? r.text}`);
@@ -202,7 +206,7 @@ else if (cmd === 'reply') {
 } else if (cmd === 'restore') {
   const r = await call('POST', `tutorials/${args[0]}/restore`);
   if (r.code !== 200) fail(`${r.code} ${r.json?.error ?? r.text}`);
-  out(`${r.json.id}: back in the panel (${r.json.state})`);
+  out(`${r.json.id}: back in the panel (${r.json.state})\nfolder: ${r.json.dir}`);
 } else if (cmd === 'trash') {
   const r = await call('GET', 'tutorials');
   if (r.code !== 200) fail(`${r.code} ${r.json?.error ?? r.text}`);

@@ -2,7 +2,7 @@
 name: rostrum
 description: >-
   This skill should be used when a prompt begins "Rostrum:" (the Rostrum panel's buttons send "Rostrum: write the script for tutorial <id>", "... show the script ...", "... add narration ...", "... build tutorial <id>", "... fix the review notes ...", "... set up ..."), or when the user asks, about a Rostrum recording or tutorial, to "write the script for this recording", "turn my walkthrough into a tutorial", "make a video from this recording", "show me the script for this recording", "add the narration", "build the film", "fix the review notes", "set up a brand", "archive this tutorial", "undo that delete of a Rostrum recording", rename, delete, restore or bring back a tutorial, set up the transcriber, the recorder or Node, or hands over narration audio ("here's the narration audio"). It carries the judgement stages of making a video from a narrated screen recording (understand, script, narration hand-off, beat file and film code, staging through the rostrum-stager agent, frame checks, review notes, brand) and the safety rules that keep recorded data out of the conversation.
-version: 0.2.0
+version: 0.3.0
 ---
 
 # Rostrum: from a narrated recording to a video
@@ -68,6 +68,11 @@ quote the path):
   for the list of commands. The ones used most:
   - `helper.mjs get tutorials` (all tutorials, the `home` folder, the brands) and `helper.mjs get tutorials/<id>`
     (one state file, plus `dir`: the tutorial folder)
+  - The id is the recording's name (`rec-` and a number) and never changes. The folder is not named by it once the
+    tutorial has a title: the helper renames the folder after the title ("Find a payee's signed ACH authorization",
+    " (2)" when that name is taken) on `event <id> scripted <title>` and on every rename. So never build a path from
+    the id or the title: take `dir` from `get tutorials/<id>`, and take it again after a `scripted` event or a rename
+    (both print the folder's new path).
   - `helper.mjs event <id> scripted <title words>`, `event <id> approved`, `event <id> notes`
   - `helper.mjs run <id> <stage>`: starts `prepare | measure | stills | sweep | render | time` and waits for it,
     printing the state at the end. Exit code 1 means the stage left an error.
@@ -113,7 +118,8 @@ stage needs, say where the tutorial is and what the next step is instead of pres
    (`helper.mjs run <id> rules @<file>`). Keep the list, by place, for the message below.
 5. Write `<dir>/script.md` in the form **`references/script.md`** gives (for a how-to, **`references/how-to.md`**
    has the defaults; **`references/explainer.md`** and **`references/showcase.md`** are two looks to draw from),
-   then `helper.mjs event <id> scripted <title>`.
+   then `helper.mjs event <id> scripted <title>`. It prints the folder the tutorial is in now, named after the
+   title: that is `<dir>` from here on.
 6. **Stop.** Show the user the script in chat, in two parts: the table of lines with what each points at (plus
    anything left out and why), then the narration alone as **one fenced plain-text code block**, one line per
    paragraph, nothing else inside it, so it copies in one action. Ask for approval or edits; both happen in chat.
@@ -174,7 +180,8 @@ When the user asks to rename, archive, delete or bring back a tutorial, find it 
 `helper.mjs get tutorials` (archived and finished ones are listed there too; deleted ones are in `helper.mjs trash`).
 When two match, ask which.
 
-- **Rename:** `helper.mjs rename <id> <title words>`.
+- **Rename:** `helper.mjs rename <id> <title words>`. The folder is renamed after the new title (the id stays);
+  refused while a stage runs, and when a file in the folder is open in another program (say so: close it, try again).
 - **Archive:** `helper.mjs archive <id>`. It is hidden from the panel; nothing is lost.
 - **Reopen:** `helper.mjs reopen <id>`. Archived tutorials, and finished ones in `done`, come back to the panel; a
   `done` one goes back to `reviewed` and shows as approved.

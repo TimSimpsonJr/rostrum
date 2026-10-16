@@ -18,7 +18,11 @@ export const LIFT = { lead: 0.6, push: 1.1, fade: 0.3 };
  *  come up in its place (`rise` before the end card starts to set): the two are never seen through each other. The
  *  close's own times do not change. */
 export const GLYPH = { lead: 1.5, size: 0.3, tall: 0.5, apart: 1.5, rise: 0.3, fade: 0.2 };
-const REVEAL_BUILT = 2.75; // the same for a mark that is built on (kit/markTiming.ts: built by 1.8, swept from 2.05 for 0.66)
+/** The fade (a beat file's `end`): the last shot holds where it is (no camera move, no scale or rise for its exit) and
+ *  fades out from when its window would have started to leave until `lag` seconds after the end card starts to set:
+ *  the two overlap that long. The close's own times do not change. */
+export const FADE = { lag: 0.3 };
+const REVEAL_BUILT =2.75; // the same for a mark that is built on (kit/markTiming.ts: built by 1.8, swept from 2.05 for 0.66)
 
 /** `built`: the brand's mark builds on (brand.json `mark.build`) instead of setting: its reveal takes longer. */
 export function closeOf(timing: Timing, built = false) {

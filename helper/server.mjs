@@ -5,6 +5,12 @@
 //   helper/whisper.mjs findTranscriber), ROSTRUM_DATA (where setup keeps the transcriber), ROSTRUM_PORT
 // The tutorials folder is ROSTRUM_HOME, else <home>/Videos/Rostrum (Movies on a Mac: tools/data.mjs); one tutorial is <tutorials>/<id>/ (tools/paths.mjs),
 // a recording arrives in <tutorials>/<id>/recording/. Brands are in <tutorials>/Brands/.
+// A tutorial's folder is named after its title once it has one (`nameFolder`: "Find a payee's signed ACH authorization",
+// " (2)" on a clash), on the `scripted` event's title and on every rename, and at start for any titled before this.
+// The id does NOT follow the folder: it stays the recording's name, kept in tutorial.json, and `dirOf` finds the
+// folder that holds it. So every route (/tutorials/<id>, /review/<id>/, /session/<id>), the panel, the review page
+// already open, the skill's helper.mjs calls, the trash (<id>-<time>) and queued requests keep working across a
+// rename; only `dir` changes, and every answer that names a tutorial's folder gives it again.
 //
 // What it will and will not do:
 //   - bound to 127.0.0.1; a request must be addressed to it by that name (no DNS rebinding)
@@ -94,6 +100,11 @@ export function fileInside(base, rel) {
 }
 
 const readJson = (file) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; } };
+// A tutorial that has just been approved, with its newest render saved under its title (pipeline.exportFilm). A film that
+// cannot be written (open in a player, say) refuses the approval, so it can be pressed again.
+const exported = (dir, t) => {
+  try { return { ...t, exported: pipeline.exportFilm(paths(dir), t) }; } catch (e) { throw new HttpError(409, `could not save the film under its title (${e.code ?? 'error'}); is it open in another program?`); }
+};
 
 export function start({ port = 4600, home = defaultHome(), brands = path.join(home, 'Brands'), runner = spawnRun, whisper = null, extensionId = process.env.ROSTRUM_EXTENSION_ID || EXTENSION_ID, setup = {} } = {}) {
   home = path.resolve(home);
@@ -111,14 +122,36 @@ export function start({ port = 4600, home = defaultHome(), brands = path.join(ho
   const requests = []; // [{ n, id, kind }]
   let requestN = 0;
 
-  /** The folder of tutorial `id`: directly inside the tutorials folder, or a 400. */
+  /** The folder of tutorial `id` (a 400 for a bad id): the folder named as the id when it is that tutorial's (or holds
+   *  no state file yet: a recording arriving), else the one whose state file keeps that id (a titled tutorial), else
+   *  <tutorials>/<id> (one that is not there yet). Always directly inside the tutorials folder. */
+  // ponytail: reads every state file for a titled tutorial on each request (a few dozen small files); keep a map if a poll ever shows in a profile
   const dirOf = (raw) => {
     let id = '';
     try { id = decodeURIComponent(raw); } catch { /* bad escape */ }
     if (!ID.test(id) || RESERVED.has(id.toLowerCase())) throw new HttpError(400, 'bad id');
     const dir = path.resolve(home, id);
     if (path.dirname(dir) !== home || path.basename(dir) !== id) throw new HttpError(400, 'bad id');
-    return dir;
+    if (fs.existsSync(dir) && (readTutorial(dir)?.id ?? id) === id) return dir;
+    return listTutorials(home).find((t) => t.id === id)?.dir ?? dir;
+  };
+  // A recording still arriving (a batch from the recorder in the last two minutes): its folder is not renamed under it.
+  const arriving = new Map(); // id -> when the recorder last sent something for it
+  const ARRIVING_MS = 2 * 60 * 1000;
+  /** Renames a titled tutorial's folder after its title (pipeline.safeName; its id when the title gives no name or a
+   *  reserved one), with " (2)", " (3)", ... when another folder has that name. Returns the folder it is in now. Leaves
+   *  it where it is while a stage runs on it or its recording is arriving. One rename of the whole folder: when it
+   *  fails (a file in it open in another program, on Windows) a 409 says so and nothing has changed. */
+  const nameFolder = async (dir, t) => {
+    if (!t.title || t.busy || jobs.has(t.id) || Date.now() - (arriving.get(t.id) ?? 0) < ARRIVING_MS) return dir;
+    const want = pipeline.safeName(t.title), base = want && !want.startsWith('.') && !RESERVED.has(want.toLowerCase()) ? want : t.id;
+    const same = (a, b) => (process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b);
+    let to = path.join(home, base);
+    for (let n = 2; fs.existsSync(to) && !same(to, dir); n++) to = path.join(home, `${base} (${n})`);
+    if (to === dir) return dir;
+    try { await move(dir, to); } catch { throw new HttpError(409, `the tutorial's folder could not be renamed to "${path.basename(to)}": a file in it is open in another program. Nothing changed; close it and try again.`); }
+    reviews.delete(dir);
+    return to;
   };
   const trashDir = path.join(home, TRASH);
   /** What is in the trash, newest first: { id, name (its title, when it had one), at, dir }. Only state files are read. */
@@ -222,6 +255,7 @@ export function start({ port = 4600, home = defaultHome(), brands = path.join(ho
       const sdir = path.join(dirOf(m[1]), 'recording');
       if (!body) return end(413, 'too big');
       recorder.lastSeen = Date.now();
+      arriving.set(readTutorial(path.dirname(sdir))?.id ?? path.basename(path.dirname(sdir)), recorder.lastSeen);
       if (m[2] === 'events') {
         try {
           const events = JSON.parse(body);
@@ -302,7 +336,7 @@ export function start({ port = 4600, home = defaultHome(), brands = path.join(ho
 
     // ── tutorials ──
     if (url.pathname === '/tutorials' && GET) {
-      const tutorials = listTutorials(home).map((t) => (t.busy && !jobs.has(t.id) ? load(path.join(home, t.id)) : t));
+      const tutorials = listTutorials(home).map(({ dir, ...t }) => (t.busy && !jobs.has(t.id) ? load(dir) : t));
       return json(200, { tutorials, recorder, brands: pipeline.brandNames(brands), home, requests, trashed: trashed().map(({ id, name, at }) => ({ id, name, at })), setup: setupState(setupCtx, setupJob) });
     }
     const done = url.pathname.match(/^\/requests\/(\d+)\/done$/);
@@ -339,7 +373,8 @@ export function start({ port = 4600, home = defaultHome(), brands = path.join(ho
         const copy = trashed().find((x) => x.id === path.basename(dir));
         if (!copy) throw new HttpError(404, 'nothing in the trash under this id');
         await move(copy.dir, dir);
-        return json(200, { ...load(dir), dir });
+        const t = load(dir), at = await nameFolder(dir, t).catch(() => dir); // back under its title (or, a file held, under its id until the next start)
+        return json(200, { ...t, dir: at });
       }
 
       if (what === 'state' && POST) {
@@ -364,7 +399,8 @@ export function start({ port = 4600, home = defaultHome(), brands = path.join(ho
           try { t = { ...transition(t, body.event), ...extra }; } catch (e) { throw new HttpError(400, e.message); }
         } else if (Object.keys(extra).length) t = { ...t, ...extra, updatedAt: new Date().toISOString() };
         else throw new HttpError(400, 'nothing to do: give an event, a title, a brand or archived');
-        return json(200, save(dir, t));
+        const at = await nameFolder(dir, t); // first, so a folder that cannot be renamed leaves the state file as it was
+        return json(200, { ...save(at, body.event === 'reviewed' ? exported(at, t) : t), dir: at });
       }
 
       if (what === 'prepare' && POST) {
@@ -515,15 +551,14 @@ export function start({ port = 4600, home = defaultHome(), brands = path.join(ho
     }
     if (url.pathname === '/review/' || url.pathname === '/review') {
       const dir = dirOf(encodeURIComponent(url.searchParams.get('tutorial') ?? ''));
-      load(dir);
+      const { id } = load(dir);
       req.resume();
-      return res.writeHead(302, head({ location: `/review/${path.basename(dir)}/` })).end();
+      return res.writeHead(302, head({ location: `/review/${id}/` })).end();
     }
     const rev = url.pathname.match(/^\/review\/([^/]+)(\/.*)?$/);
     if (rev) {
-      const dir = dirOf(rev[1]);
-      load(dir);
-      if (!rev[2]) { req.resume(); return res.writeHead(302, head({ location: `/review/${path.basename(dir)}/` })).end(); }
+      const dir = dirOf(rev[1]), { id } = load(dir);
+      if (!rev[2]) { req.resume(); return res.writeHead(302, head({ location: `/review/${id}/` })).end(); }
       // the page's two buttons, answered here (the tool itself knows nothing of tutorials or the session)
       if (rev[2] === '/api/send' && POST) {
         req.resume();
@@ -536,12 +571,12 @@ export function start({ port = 4600, home = defaultHome(), brands = path.join(ho
         req.resume();
         let t = load(dir);
         try { t = transition(t, 'reviewed'); } catch (e) { throw new HttpError(400, e.message); }
-        return json(200, save(dir, t));
+        return json(200, save(dir, exported(dir, t)));
       }
       if (rev[2] === '/api/tutorial' && GET) { // what the page says of the tutorial: its title, its state, the film's length
         req.resume();
         const t = load(dir);
-        return json(200, { id: t.id, title: t.title, state: t.state, length: t.length ?? null, renders: t.renders });
+        return json(200, { id: t.id, title: t.title, state: t.state, length: t.length ?? null, renders: t.renders, exported: t.exported });
       }
       // the tool sees its own paths (/, /api/..., /video); it serves videos from <tutorial>/out and notes from <tutorial>/review only
       req.url = rev[2] + url.search;
@@ -562,12 +597,18 @@ export function start({ port = 4600, home = defaultHome(), brands = path.join(ho
     return end(404);
   }
 
-  return new Promise((resolve, reject) => server.once('error', reject).listen(port, '127.0.0.1', () => resolve({
+  // Tutorials titled before their folders were named after their titles: renamed here, at start. A folder already
+  // named right is left as it is, so this runs at every start and does nothing the second time; one that cannot be
+  // renamed (a file in it open) keeps its folder until the next start.
+  const migrate = async () => {
+    for (const { dir, ...t } of listTutorials(home)) await nameFolder(dir, t).catch((e) => console.error(`rostrum helper: ${t.id}: ${e.message}`));
+  };
+  return migrate().then(() => new Promise((resolve, reject) => server.once('error', reject).listen(port, '127.0.0.1', () => resolve({
     port: server.address().port, home,
     /** resolves when no stage is running on `id` (tests) */
     idle: (id) => jobs.get(id) ?? Promise.resolve(),
     close: async () => { await Promise.all([...jobs.values(), setupJob.ended]); server.closeAllConnections?.(); await new Promise((r) => server.close(r)); },
-  })));
+  }))));
 }
 
 // Compared as real paths: Node resolves this module's own address through links, but not the path it was started

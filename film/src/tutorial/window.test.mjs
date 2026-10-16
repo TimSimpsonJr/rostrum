@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { cameraAt, scrollAt } from './cameraAt.ts';
 import { makeBeats } from './beats.ts';
-import { windowsIn } from '../../../tools/measure-boxes.mjs';
+import { unhidesIn, windowsIn } from '../../../tools/measure-boxes.mjs';
 
 const VP = { width: 1920, height: 1080 };
 const near = (a, b, e = 1e-6) => Math.abs(a - b) < e;
@@ -83,4 +83,14 @@ test('scrolls: a whole screen scrolls its own page to a named element; what is f
   // a film that does not scroll has no scroll anywhere
   const plain = makeBeats(file, boxes, timing).beats.shots[1];
   assert.ok(!('scroll' in plain) && !('scroll' in plain.staging));
+});
+
+test('unhidesIn: an `opens` with unhide names its node on the screen the node is on (not the beat screen), once; one without unhide, none', () => {
+  const f = { nodes: { menu: [2, 40], item: [2, 41], tip: [0, 7], btn: [0, 3] }, beats: [
+    { line: 0, screen: 0, cursor: 'click', target: 'btn', change: { kind: 'opens', node: 'menu', after: 'btn', unhide: true } },
+    { line: 1, then: [{ cursor: 'click', target: 'btn', change: { kind: 'opens', node: 'menu', after: 'btn', unhide: true } }] },
+    { line: 2, change: { kind: 'opens', node: 'tip', after: 'btn' } }] };
+  assert.deepEqual(unhidesIn(f), { 2: [40] });
+  assert.deepEqual(unhidesIn(null), {});
+  assert.deepEqual(unhidesIn(file), {});
 });

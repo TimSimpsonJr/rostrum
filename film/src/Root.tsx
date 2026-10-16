@@ -35,11 +35,11 @@ export const Root: React.FC = () => (
     {/* Any tutorial, from its folder (no film has code of its own; the film that was built by hand is in old/): beats.json + clean/boxes.json + narration/timing.json (tutorial/Tutorial.tsx). */}
     <Composition id="Tutorial" component={Tutorial} width={W} height={H} fps={FPS} durationInFrames={FPS} defaultProps={{ file: null, boxes: {}, timing: null, brand: NO_BRAND, missing: null }} calculateMetadata={tutorialMetadata} />
     {/* What tools/measure-boxes.mjs reads: the boxes of the nodes a beat file names. */}
-    <Still id="Measure" component={Measure} width={1920} height={1080} defaultProps={{ nodes: {}, windows: {} }} />
+    <Still id="Measure" component={Measure} width={1920} height={1080} defaultProps={{ nodes: {}, windows: {}, unhides: {} }} />
     {/* What tools/gestures.mjs reads: where every element of a clean screen is (ids and boxes, no text). */}
-    <Still id="Probe" component={Probe} width={1920} height={1080} defaultProps={{ screens: [] as number[], windows: {} }} />
+    <Still id="Probe" component={Probe} width={1920} height={1080} defaultProps={{ screens: [] as number[], windows: {}, unhides: {} }} />
     {/* What tools/sweep.mjs reads: the film's screens rebuilt with its stand-in rules, reported to the console. */}
-    <Still id="Sweep" component={Sweep} width={1920} height={1080} defaultProps={{ screens: [] as number[], windows: {} }} />
+    <Still id="Sweep" component={Sweep} width={1920} height={1080} defaultProps={{ screens: [] as number[], windows: {}, unhides: {} }} />
     {/* npm run still -- fixtures/tutorials/fixture-keys Screen-keys <out.png> (or fixture-keys-dark) */}
     <Still id="Screen-keys" component={FixtureScreen} width={1920} height={1080} />
     {/* A library move or a one-off alone, at second t of its own run: node --experimental-strip-types tools/move-still.mjs <name> (MoveLook.tsx; an engine move, the browser bar among them, is looked at in a film) */}

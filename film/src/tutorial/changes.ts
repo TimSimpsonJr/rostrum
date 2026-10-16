@@ -59,10 +59,11 @@ export type Staging = {
   /** shut until `at`, then uncovered from its top edge (it hangs from what was clicked), set in place whole (`centre`),
    *  slid down to its place from above the page's top edge (`above`: from under the browser bar), or slid in a short
    *  way from the window's right edge with its opacity coming up (`right`: a bar's `arrives`) */
-  opens: { node: number; at: number; from: 'top' | 'centre' | 'above' | 'right' }[];
+  opens: { node: number; at: number; from: 'top' | 'centre' | 'above' | 'right'; /** the capture holds it display:none: displayed (`unhide`) */ unhide?: boolean;
+    /** what moves is the whole panel that holds the node (`panelOf`): a dialog drawn as a layer, whose own panel may be a wrapper of it */ panel?: boolean }[];
   /** something open goes the way it came, from `at` (the open, mirrored in time; a dialog's backdrop dims out as it
    *  came), and is hidden until `until`: the next open of the same node, else for good */
-  closes?: { node: number; at: number; from: Staging['opens'][number]['from']; until: number }[];
+  closes?: { node: number; at: number; from: Staging['opens'][number]['from']; until: number; panel?: boolean }[];
   /** a control clicked at `at`: it takes the page's own hover look as the cursor comes over it, gives on the press,
    *  and lets go of the hover when the cursor moves on (`until`) */
   presses: { node: number; at: number; until: number }[];
@@ -340,6 +341,48 @@ function addedOf(els: HTMLElement[], shut: HTMLElement[]): Added {
   return { units, boxes, kept: [...touched].map((e) => [e, STYLED.map((p) => e.style[p])]) };
 }
 
+/** The panel a dialog is: `e` and its ancestors up to (not including) its fixed host and anything as large as the
+ *  window; the outermost of them. A page that paints the panel on a wrapper of the node (its card on the dialog's
+ *  frame, the node its content) has it set in whole, never shown before its open. */
+export function panelOf(e: HTMLElement, host: HTMLElement | null): HTMLElement {
+  const view = e.ownerDocument.defaultView!, vw = view.innerWidth, vh = view.innerHeight;
+  let p = e;
+  for (let a = e.parentElement; a && a !== host && a !== e.ownerDocument.body; a = a.parentElement) { const r = a.getBoundingClientRect(); if (r.width >= 0.9 * vw && r.height >= 0.9 * vh) break; p = a; }
+  return p;
+}
+
+/** Shows only the layer that holds each of `ids` (a dialog): its topmost fixed ancestor (else the node itself) and what
+ *  dims the page behind it, as `overlayOf` finds them; everything else of the page is hidden and its grounds are
+ *  transparent, so the capture lies over another capture of the same page as a layer (Template `layers`). */
+export function keepLayer(doc: Document, mirror: Mirror, ids: number[]) {
+  const memo = memoOf(doc), keep: Element[] = [];
+  for (const id of ids) { const e = mirror.getNode(id) as HTMLElement | null; if (!e?.style) continue; const o = overlayOf(e, id, memo); keep.push(o.host ?? e, ...o.backdrops.map((b) => b.el)); }
+  const css = doc.createElement('style');
+  css.textContent = 'html,body{background:transparent!important} [data-rt-under],[data-rt-under] *{visibility:hidden!important}';
+  doc.head.appendChild(css);
+  const hide = (n: Element) => { for (const c of [...n.children]) { if (keep.includes(c)) continue; if (keep.some((k) => c.contains(k))) { (c as HTMLElement).style?.setProperty('background', 'transparent', 'important'); hide(c); } else c.setAttribute('data-rt-under', ''); } };
+  hide(doc.body);
+}
+
+/** Holds how far the page scrolls as it was built: a 1 px mark, hidden, at the bottom of its scrollable extent. What
+ *  a screen stages afterwards (a menu shut, scaled to 96% or 88% before it opens; a dialog risen 12 px) changes that
+ *  extent when it reaches the page's bottom, and a page scrolled near its end was then clamped to the smaller one: it
+ *  stood lower than measured until the thing opened. With the mark the extent never shrinks, so the scroll stays. */
+export function holdExtent(doc: Document) {
+  const pin = doc.createElement('div'), bottom = (doc.scrollingElement ?? doc.documentElement).scrollHeight;
+  pin.setAttribute('data-rt-extent', '');
+  pin.style.cssText = `position:absolute;left:0;top:${bottom - 1}px;width:1px;height:1px;visibility:hidden;pointer-events:none`;
+  doc.documentElement.appendChild(pin);
+  return pin;
+}
+
+/** Displays `e`, which the capture holds hidden (a hover menu: display:none until the pointer is over it), where the
+ *  page's CSS lays it out: an inline display:none goes; if the page's own rules still hide it, `block`. */
+export function unhide(e: HTMLElement) {
+  if (e.style.display === 'none') e.style.removeProperty('display');
+  if (e.ownerDocument.defaultView!.getComputedStyle(e).display === 'none') e.style.setProperty('display', 'block', 'important');
+}
+
 /** Sets everything a screen stages, from the time alone (frames render in any order). */
 export function stage(doc: Document, mirror: Mirror, t: number, plan: Staging) {
   const memo = memoOf(doc), el = (id: number) => mirror.getNode(id) as HTMLElement | null;
@@ -383,6 +426,7 @@ export function stage(doc: Document, mirror: Mirror, t: number, plan: Staging) {
   const closes = plan.closes ?? [];
   for (const o of plan.opens) {
     const e = el(o.node);
+    if (e && o.unhide) unhide(e);
     // (an open that follows a close of the same node has no say until that close is over: until its own moment)
     if (!e || closes.some((c) => c.node === o.node && c.at < o.at && t < c.until)) continue;
     if (o.from === 'centre') {
@@ -391,7 +435,7 @@ export function stage(doc: Document, mirror: Mirror, t: number, plan: Staging) {
       if (host) { host.style.visibility = t >= o.at - 0.02 ? 'visible' : 'hidden'; if (hostBg) host.style.backgroundColor = mix(hostBg, 'transparent', dim); }
       for (const b of backdrops) { b.el.style.visibility = t >= o.at - 0.02 ? 'visible' : 'hidden'; b.el.style.opacity = (b.opacity * dim).toFixed(4); }
     }
-    open(e, t, o.at, o.from, o.from === 'above' || o.from === 'right' ? travelOf(e, o.node, o.from, memo) : 0);
+    open(o.panel ? panelOf(e, overlayOf(e, o.node, memo).host) : e, t, o.at, o.from, o.from === 'above' || o.from === 'right' ? travelOf(e, o.node, o.from, memo) : 0);
   }
 
   // what closes goes the way it came. Before its moment it is as the opens above left it (or, never opened by the
@@ -405,7 +449,7 @@ export function stage(doc: Document, mirror: Mirror, t: number, plan: Staging) {
       if (host) { host.style.visibility = up ? 'visible' : 'hidden'; if (hostBg) host.style.backgroundColor = mix(hostBg, 'transparent', dim); }
       for (const b of backdrops) { b.el.style.visibility = up ? 'visible' : 'hidden'; b.el.style.opacity = (b.opacity * dim).toFixed(4); }
     }
-    open(e, t, c.at, c.from, c.from === 'above' || c.from === 'right' ? travelOf(e, c.node, c.from, memo) : 0, true);
+    open(c.panel ? panelOf(e, overlayOf(e, c.node, memo).host) : e, t, c.at, c.from, c.from === 'above' || c.from === 'right' ? travelOf(e, c.node, c.from, memo) : 0, true);
   }
 
   // what the capture added sets in: it is uncovered from its top as it comes up, what is below it in its box is

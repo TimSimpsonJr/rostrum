@@ -72,15 +72,21 @@ export const measure = (e: HTMLElement, screen: number, node: number): Measured 
 };
 
 /** `nodes`: name -> [screen, node id] (a beat file's `nodes`). `windows`: screen -> the node a shot shows as its
- *  window (tools/measure-boxes.mjs `windowsIn`): that screen is measured unclipped, as the film draws it. Prints `RT-BOXES:` + JSON { name: Measured }. */
-export const Measure: React.FC<{ nodes: Record<string, [number, number]>; windows?: Record<number, number[]>;
+ *  window (tools/measure-boxes.mjs `windowsIn`): that screen is measured unclipped, as the film draws it. `unhides`:
+ *  screen -> the nodes it holds hidden that the film displays (`unhidesIn`): measured displayed. Prints `RT-BOXES:` + JSON { name: Measured }. */
+export const Measure: React.FC<{ nodes: Record<string, [number, number]>; windows?: Record<number, number[]>; unhides?: Record<number, number[]>;
   /** the film's browser bar, when it has one (tools/measure-boxes.mjs `barIn`): its hero bookmark is measured as
    *  "bar:hero", node -1, in the px of the screen it is over: above the page, so its y is negative */
-  bar?: { screen: number; width: number; spec: BarSpec } | null }> = ({ nodes, windows = {}, bar = null }) => {
+  bar?: { screen: number; width: number; spec: BarSpec } | null;
+  /** a `becomes` anchor each, in beat order (tools/measure-boxes.mjs `anchorsIn`): `to`'s screen is scrolled by how much
+   *  lower `to` sits than `from`, its names measured again, and the document scroll it got is `to`'s `pageY` (the film scrolls there) */
+  anchors?: { from: string; to: string }[];
+  /** screen -> px it is rebuilt taller (tools/measure-boxes.mjs `extendsIn`): measured as the film draws it */
+  extend?: Record<number, number> }> = ({ nodes, windows = {}, unhides = {}, bar = null, anchors = [], extend = {} }) => {
   const screens = [...new Set(Object.values(nodes).map(([s]) => s))];
   const { delayRender, continueRender } = useDelayRender();
   const [handle] = useState(() => delayRender('measure'));
-  const got = useRef(new Map<number, Record<string, Measured>>());
+  const got = useRef(new Map<number, Record<string, Measured>>()), docs = useRef(new Map<number, { doc: Document; mirror: any }>());
   const [n, setN] = useState(0);
   const barAt = useRef<HTMLDivElement>(null), [hero, setHero] = useState<Record<string, Measured> | null>(bar ? null : {});
   useEffect(() => {
@@ -100,7 +106,16 @@ export const Measure: React.FC<{ nodes: Record<string, [number, number]>; window
   }, []);
   useEffect(() => {
     if (n < screens.length || !hero) return;
-    console.log('RT-BOXES:' + JSON.stringify(Object.assign({}, ...screens.map((s) => got.current.get(s)), hero)));
+    const all: Record<string, Measured> = Object.assign({}, ...screens.map((s) => got.current.get(s)), hero);
+    for (const { from, to } of anchors) {
+      const a = all[from], b = all[to], d = b && docs.current.get(b.screen);
+      if (!a || !d) continue;
+      const view = d.doc.defaultView!;
+      view.scrollBy(0, b.y - a.y);
+      for (const [name, [screen, node]] of Object.entries(nodes)) { const e = screen === b.screen ? (d.mirror.getNode(node) as HTMLElement | null) : null; if (e?.getBoundingClientRect) all[name] = measure(e, screen, node); }
+      all[to] = { ...all[to], pageY: view.scrollY };
+    }
+    console.log('RT-BOXES:' + JSON.stringify(all));
     continueRender(handle);
   }, [n, hero]);
   return (
@@ -108,7 +123,7 @@ export const Measure: React.FC<{ nodes: Record<string, [number, number]>; window
       {bar ? <div ref={barAt} style={{ position: 'absolute', left: 0, top: 0, width: bar.width, height: barMetrics(bar.width).height }}><BrowserBar spec={bar.spec} width={bar.width} /></div> : null}
       {screens.map((s) => (
         <RecordedScreen
-          key={s} screen={s} unclip={windows[s]} style={{ position: 'absolute', left: 0, top: 0 }}
+          key={s} screen={s} extend={extend[s]} unclip={windows[s]} unhide={unhides[s]} style={{ position: 'absolute', left: 0, top: 0 }}
           prepare={(doc, mirror) => {
             const boxes: Record<string, Measured> = {};
             for (const [name, [screen, node]] of Object.entries(nodes)) {
@@ -116,6 +131,7 @@ export const Measure: React.FC<{ nodes: Record<string, [number, number]>; window
               if (e?.getBoundingClientRect) boxes[name] = measure(e, screen, node);
             }
             got.current.set(s, boxes);
+            docs.current.set(s, { doc, mirror });
             setN(got.current.size);
           }}
         />

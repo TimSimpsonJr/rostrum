@@ -58,7 +58,7 @@ clears it when the film is built. If the build stops before the render (a sweep 
 | `chalk` | `[]`. Nothing reads it yet |
 | `stage` | Optional: the film's stage (a scene may name its own; a shot has the film's). `"light"` or `"dark"`, or a named stage: `{ "move": "field" \| "environment" \| "image" \| "footage", "tone": "light" \| "dark", ...its inputs }` (`references/stages.md`). Without it: the brand's own stage when its `brand.json` has one, else light |
 | `open` | Optional: `{ "move": "title-makes-room" }` (the first screen is there from the first frame and slides aside while the title fades in beside it, then returns) or `{ "move": "cut-to-screen" }` (no title: the first screen already placed). Without it the film opens on the title alone |
-| `end` | Optional: `{ "move": "logo-lift", "from": "<name>" }`: the camera pushes toward that element (the site's own logo on the last shot's screen) and the brand's mark sets out of it (`references/moves.md`, logo-lift); or `{ "move": "end-glyph", "glyph": "<name>" }`: a hard cut to that element of the last screen alone on the stage, its parts parting and coming back, the mark coming up out of it (end-glyph). Without it the film ends the plain way |
+| `end` | Optional: `{ "move": "logo-lift", "from": "<name>" }`: the camera pushes toward that element (the site's own logo on the last shot's screen) and the brand's mark sets out of it (`references/moves.md`, logo-lift); or `{ "move": "end-glyph", "glyph": "<name>" }`: a hard cut to that element of the last screen alone on the stage, its parts parting and coming back, the mark coming up out of it (end-glyph); or `{ "move": "fade" }`: the last shot holds where it is, no camera or window motion, and fades out as the end card sets in (fade). Without it the film ends the plain way (the last window draws back a little as it goes) |
 
 One beat:
 
@@ -68,11 +68,12 @@ One beat:
 | `screen` | a screen number | The snapshot shown. Optional after the first beat: a beat without it stays on the screen before. **A different number is a cut to a new shot** |
 | `window` | a name, or a list of names | Only on the first beat of a shot: the shot shows those elements of the screen alone, as the window on the stage (below, "Some elements as the window") |
 | `bare` | `true` | Only beside `window`: the elements stand on the stage with no window frame and no shadow, until a `frame-back` change brings them (or for the whole shot) |
+| `extend` | px, a whole number up to half the recorded height | Only on the first beat of a whole-screen shot: more of the page below the recorded window (below, "More of the page below the window") |
 | `frame` | `{ "whole": true }`, `{ "target": "<name>", "with": "self" \| "row" \| "group" \| "corner" }` or `{ "targets": ["<name>", "<name>", ...] }`; any of them with `"back": true`, `"settle": false`, `"side": "left" \| "right"`, `"cut": true` and/or `"hold": true` | Where the camera is by this beat. Optional: without it the camera stays where it was (a shot's first beat without one is `whole`). On a beat with a `cue` and no cursor of its own, the camera has arrived by that word |
 | `cursor` | `enter`, `click`, `rest`, `move`, `drag` (with `to`, `release`), `leave` | What the cursor does (below). Optional: a beat can be camera only |
 | `target` | a name | What the cursor goes to. Needed for `click`, `rest`, `move` |
 | `cue` | a word, or `{ "word": "...", "nth": 1 }` | The word of this beat's line at which the cursor arrives or clicks. Without it: the line's start |
-| `change` | `{ "kind": "opens", "node": "<name>", "after": "<name>" }`, `{ "kind": "close", "node": "<name>" }`, `{ "kind": "hover", "node": "<name>", "after": "<name>" }`, `{ "kind": "page" }`, `{ "kind": "frame-back" }`, `{ "kind": "selects", "node": "<name>" }`, `{ "kind": "scrolls", "to": "bottom" \| "top" \| "<name>" }`, `{ "kind": "fills", "node": "<name>", "typed": true, "text": "...", "to": <cue> }`, `{ "kind": "becomes", "screen": <n>, "after": "<name>", "grows": ["<name>", "<name>"] }`; `selects` also takes `"to": <cue>` | What the screen does (below) |
+| `change` | `{ "kind": "opens", "node": "<name>", "after": "<name>" }`, `{ "kind": "close", "node": "<name>" }`, `{ "kind": "hover", "node": "<name>", "after": "<name>" }`, `{ "kind": "page" }`, `{ "kind": "frame-back" }`, `{ "kind": "selects", "node": "<name>" }`, `{ "kind": "scrolls", "to": "bottom" \| "top" \| "<name>" }`, `{ "kind": "fills", "node": "<name>", "typed": true, "text": "...", "to": <cue> }`, `{ "kind": "becomes", "screen": <n>, "after": "<name>", "grows": ["<name>", "<name>"], "anchor": ["<name>", "<name>"] }`; `selects` also takes `"to": <cue>` | What the screen does (below) |
 | `then` | a list of `{ cursor, target, cue, change }` | Further cursor actions inside the same line, in order. An entry may be a `change` alone (with a `cue`, or none) |
 | `bar` | `{ "title", "host", "bookmarks": [{ "label", "icon" }], "hero", "from": <cue>, "arrives": "down" \| "right" \| "appear" }` | A browser bar grows out of the window's top under this beat's line and goes back in after it (below, "The browser bar") |
 | `sequence` | `{ "from": <screen>, "watch": <screen>, "then": [<screen>, ...], "follow": "<name>" }` | The page works by itself: its captures play in place under the shot's camera (below, "A sequence") |
@@ -81,11 +82,22 @@ One beat:
 | `cut` | `{ "move": "<name>", "until": <cue>, ...inputs }` | Only on the first beat of a new shot: the way into it, a cut move from the catalogue. The shot before stays up for the cut's length (its own, or with `until` up to that word of the line). On the film's first beat it is the way into the first shot from the title (a one-off `Cut.tsx` that draws an opening and hands over to the window): it starts when the window would have come, the window is not drawn until the move draws it, and the shot's camera and cursor are as they are without it |
 | `scene` | `{ "stage": "light" \| "dark" \| a named stage }` (or `{}`) | A beat with no screen: a scene of this beat's `moves` on the stage. The cursor is not on it (it leaves before, and comes on again after). The next beat names a `screen` |
 
+### More of the page below the window
+
+When what a shot is about sits near the bottom of the recorded window, framing it shows the window's bottom edge and the
+stage under it. `"extend": 300` on the shot's first beat rebuilds its screen, and every capture a `becomes` swaps in on
+that shot, 300 px taller than recorded (same width, same scroll), so the page below the old fold is drawn; the window
+on the stage is that much taller. Something fixed to the window (a dialog) lays out in the taller window, as a browser
+would. Measure, the gestures probe and the sweep rebuild those screens taller too, so run the `measure` stage again,
+and rows that come into view go through the scrub and the sweep like any other. One screen has one layout: every shot
+that shows it must ask for the same `extend`.
+
 ### The cursor
 
 - `enter`: on the first beat only. The cursor comes on from off the frame's bottom right with the camera's first
   move, or, under a long first line, about two seconds after the window has settled: it then rests low and right in
   the window, off what is being read, until its first action. It stays until a scene or the end.
+- No `cursor` on the first beat (its line is only context): the cursor waits, and comes on from off the frame's bottom right at the start of the first beat that has a cursor action (`enter` there, or the action itself), never before.
 - `click`: the cursor travels to the control, lands on a blank part of it at the cue, presses; the control answers
   with the page's own hover and press look. The blank part is the one nearest the control's label: just past the
   label's end (a wide row with its label at the left is clicked beside the label, not in its empty middle).
@@ -123,6 +135,15 @@ One beat:
   the beat that frames what opened; its time comes from the click on `after` either way. `node` is the panel the
   viewer sees, not a wrapper as large as the window (`references/understand.md`, step 5). `after` must be the
   target of a `click` in the film.
+  `"unhide": true` is for a menu the capture holds hidden (a hover dropdown, display:none in every screen, which
+  measure reports "not found"): the film displays it on its own screen (`nodes[name][0]`), so it and the items in it
+  are measured and can be cursor targets, and then opens it as above.
+  A `node` named on a later capture of the same page that the shot does not show (`"nodes": { "dialog": [7, 927] }`
+  while the shot is on screen 6: a dialog the app filled after the click) opens as a layer: that capture is drawn over
+  the shot's page with only the dialog's own layer and its backdrop showing, under the same camera, and the page is not
+  swapped. It opens as a dialog does (the backdrop dims in, the panel sets in place) where its own capture has it, and
+  the nodes inside it (named on the same capture) are cursor, frame and move targets while it is up. Close what is open
+  on the page under it (`close` on the same click). A whole screen only (not a windowed shot, nor one with a bar).
 - `close`: `node` (a menu, a dialog) goes the way it came: covered back to its top edge, or shrinking a little as
   its backdrop dims out, and it is hidden 0.3 s later. It starts on the beat's `cue` word (the click on its Done
   button, say), without one with the line, and stays shut until its next `opens` on the shot. `node` is what an
@@ -159,6 +180,9 @@ One beat:
   goes, so nothing jumps. `"wait": true`: the page took its time to answer (a save): the capture comes as long after
   the click as the recording took from the capture before it (the manifest's times), 2 s at most, and when it is the
   last thing before the closing line that line gets as much more air (run the `time` stage again). An `opens` of something that is only in the new capture opens as the capture comes.
+  `anchor`: two names of one element both captures hold (a table), on the capture before and on the new one, when
+  the new capture has it at another height (more above it, another scroll): the new capture is scrolled so it lands
+  where it was, and is measured so scrolled (run the `measure` stage again). A whole screen only, not a windowed shot.
 - `scrolls`: the content of the shot's window moves up in one eased move: to its `bottom`, back to its `top`, or
   until a named element is near the window's top. It starts on the beat's `cue` word (without one, with the line)
   and has landed before the line ends; the camera holds while it runs, so do not put a new target framing on or

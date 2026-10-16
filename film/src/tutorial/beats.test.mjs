@@ -8,7 +8,7 @@ import path from 'node:path';
 import { cameraAt, cameraFaults, project } from './cameraAt.ts';
 import { cursorAt } from './cursorPath.ts';
 import { OPEN, authoredText, makeBeats, movesFrom, screensShown } from './beats.ts';
-import { findChange } from './changes.ts';
+import { findChange, holdExtent, panelOf } from './changes.ts';
 import { cutBy, frameFor, seenBy, settle } from './framing.ts';
 import { clearNear, clearOf, spotFor } from './spot.ts';
 import { pacing } from '../../../tools/pacing.mjs';
@@ -469,7 +469,7 @@ test('end: a logo lift gives the last shot one more camera key, a push onto the 
   assert.deepEqual(far.faults, []);
   assert.ok(far.beats.lift.from.w < 0.6 * 1920);
   assert.throws(() => makeBeats({ ...file, end: { move: 'logo-lift', from: 'nothing' } }, boxes, timing), /end names "nothing", which has no measured box/);
-  assert.throws(() => makeBeats({ ...file, end: { move: 'fade', from: 'mark' } }, boxes, timing), /end is \{ move: "logo-lift"/);
+  assert.throws(() => makeBeats({ ...file, end: { move: 'spin', from: 'mark' } }, boxes, timing), /end is \{ move: "logo-lift".*or \{ move: "fade" \}/);
   assert.throws(() => makeBeats({ ...file, beats: [...file.beats.slice(0, 2), { line: 2, scene: {} }], end: { move: 'logo-lift', from: 'mark' } }, boxes, timing), /ends on a whole screen/);
 });
 
@@ -503,6 +503,22 @@ test('end: a glyph cuts the last shot away 1.5 s before its window would have le
   const lifted = makeBeats({ ...scrolled, end: { move: 'logo-lift', from: 'low' } }, boxes, timing);
   assert.equal(lifted.beats.shots[0].camera.at(-1).box.y, 480);
   assert.ok(Math.abs(lifted.beats.lift.from.y + lifted.beats.lift.from.h / 2 - 540) < 1e-6, 'and the mark sets out of where it is on the frame');
+});
+
+test('end: a fade holds the last shot\'s camera still from when its window would have left, keeps the shot up over the end card for the fade, and changes nothing else', () => {
+  const timing = T3([['open', 'the', 'menu'], ['choose', 'profile', 'now'], ['done']]);
+  const file = { version: 1, title: 'T', viewport: VP, nodes: {}, chalk: [], beats: [
+    { line: 0, screen: 0, frame: { whole: true }, cursor: 'enter' }, { line: 1, cursor: 'click', target: 'menu', cue: 'profile' }, { line: 2, cursor: 'leave' }] };
+  const plain = makeBeats(file, { menu: BOX }, timing), faded = makeBeats({ ...file, end: { move: 'fade' } }, { menu: BOX }, timing), close = plain.close, fps = 30;
+  assert.equal(plain.beats.fade, undefined); assert.equal(faded.beats.fade, true);
+  assert.deepEqual(faded.close, plain.close); assert.equal(faded.frames, plain.frames);
+  assert.deepEqual([faded.beats.lift, faded.beats.glyph], [undefined, undefined]);
+  const shot = faded.beats.shots[0], cam = shot.camera;
+  assert.equal(shot.to, Math.round((close.endCard + 0.3) * fps) / fps, 'up until 0.3 s into the end card');
+  const still = Math.round(close.windowOut * fps), at = (f) => cameraAt(cam, f, VP);
+  assert.deepEqual(cam.slice(0, -2), plain.beats.shots[0].camera.slice(0, -1), 'the camera before is the film\'s own');
+  assert.deepEqual(at(Math.round(shot.to * fps) - 1), at(still), 'the camera does not move from when the window would have left');
+  assert.deepEqual(faded.faults, plain.faults);
 });
 
 test('stage: a tone, or a named stage that passes its own check; its tone is the film\'s; a scene may name one; a film without one is as before', async () => {
@@ -553,6 +569,13 @@ test('close: what an open showed goes the way it came, on the cue, and is shut u
   // a film with no close has no `closes` at all (its staging is what it was)
   assert.ok(!('closes' in makeBeats({ ...file, beats: [...file.beats.slice(0, 2), { line: 2 }, ...file.beats.slice(3)] }, boxes, timing).beats.shots[0].staging));
   assert.throws(() => makeBeats({ ...file, beats: [...file.beats.slice(0, 2), { line: 2, change: { kind: 'close', node: 'nope' } }, ...file.beats.slice(3)] }, boxes, timing), /names "nope", which has no measured box/);
+  // a menu the capture holds hidden (`unhide`): staged as any open, and marked to be displayed
+  const hid = structuredClone(file); hid.beats[0].change.unhide = true;
+  const h = makeBeats(hid, boxes, timing).beats.shots[0].staging.opens[0];
+  assert.deepEqual(h, { ...st.opens[0], unhide: true });
+  assert.ok(!('unhide' in st.opens[0]));
+  hid.beats[0].change.unhide = 'yes';
+  assert.throws(() => makeBeats(hid, boxes, timing), /line 0: an opens' unhide is true or false/);
 });
 
 test('drag: the press is held from the cue to the release, the thing rides to where it is dropped, and the page after the drop follows', () => {
@@ -694,4 +717,127 @@ test('bare: a windowed shot without its frame; frame-back says when it returns',
   assert.ok(!('bare' in makeBeats(showFile({}, beats({ window: 'panel' })), SHOW, timing).beats.shots[0]));
   assert.throws(() => makeBeats(showFile({}, beats({ bare: true })), SHOW, timing), /line 0: bare goes with window on the first beat of its shot/);
   assert.match(makeBeats(showFile({}, beats({ window: 'panel' }, { kind: 'frame-back' })), SHOW, timing).faults.join('\n'), /line 1: frame-back is for a shot that is bare/);
+});
+
+test('a first line that is only context: with no cursor on the first beat, the cursor comes on at the start of the first beat that has one, not before', () => {
+  const lines = (...ls) => ({ fps: 30, dir: 'narration', sentences: ls.map(([start, dur, ws], i) => ({ i, file: `l${i}`, clipAt: start, clipDur: dur, start, end: start + dur, words: ws.map((w, k) => ({ w, start: start + 0.5 * k, end: start + 0.5 * k + 0.4 })) })) });
+  const timing = lines([3.6, 8, ['context']], [12.2, 4, ['open', 'the', 'menu', 'now']], [16.8, 4, ['now', 'click', 'the', 'menu']], [21.4, 2, ['done']]);
+  const F = (s) => Math.round(s * 30), file = (b0, b1, b2) => ({ version: 1, title: 'T', viewport: VP, nodes: {}, chalk: [], beats: [
+    { line: 0, screen: 0, frame: { whole: true }, ...b0 }, { line: 1, ...b1 }, { line: 2, ...b2 }, { line: 3, cursor: 'leave' }] });
+  // as ever: `enter` on the first beat brings it on about two seconds after the window settles, under a long first line
+  const early = makeBeats(file({ cursor: 'enter' }, { cursor: 'click', target: 'menu', cue: 'menu' }, {}), { menu: BOX }, timing);
+  assert.ok(early.beats.cursor.moves[0].from < F(8), `${early.beats.cursor.moves[0].from}`);
+  // no cursor on the first beat: it travels in from off the frame with the line of its first action, and acts on the cue
+  const waited = makeBeats(file({}, { cursor: 'click', target: 'menu', cue: 'menu' }, {}), { menu: BOX }, timing);
+  const m = waited.beats.cursor.moves;
+  assert.ok(m[0].from >= F(12.2) && m[0].to <= F(13.2), `${m[0].from} ${m[0].to}`);
+  assert.deepEqual(waited.faults, []);
+  assert.deepEqual(waited.beats.clicks, early.beats.clicks);
+  // an `enter` on a later beat, its first action a line on: it comes on at the start of that `enter`'s line and rests
+  const rested = makeBeats(file({}, { cursor: 'enter' }, { cursor: 'click', target: 'menu', cue: 'menu' }), { menu: BOX }, timing).beats.cursor.moves;
+  assert.equal(rested[0].from, F(12.2));
+  assert.ok(rested[1].to <= F(18.3) && rested[1].from > rested[0].to);
+});
+
+test('becomes with an anchor: the new capture is scrolled as Measure scrolled it (its `pageY`); without one, nothing changes', async () => {
+  const { anchorsIn } = await import('../../../tools/measure-boxes.mjs');
+  const timing = T3([['open', 'the', 'menu'], ['choose', 'the', 'menu'], ['done']]);
+  const boxes = { menu: BOX, tableA: { screen: 0, node: 9, x: 100, y: 300, w: 800, h: 200 }, tableB: { screen: 1, node: 9, x: 100, y: 300, w: 800, h: 200, pageY: 343 } };
+  const file = (change) => ({ version: 1, title: 'T', viewport: VP, nodes: {}, chalk: [], beats: [
+    { line: 0, screen: 0, frame: { whole: true }, cursor: 'enter' }, { line: 1, cursor: 'click', target: 'menu', cue: 'menu', change }, { line: 2, cursor: 'leave' }] });
+  const plain = makeBeats(file({ kind: 'becomes', screen: 1, after: 'menu' }), boxes, timing).beats.shots[0].screens;
+  assert.deepEqual(plain.map((x) => Object.keys(x)), [['at', 'screen'], ['at', 'screen']], 'no anchor: the captures as ever');
+  const anchored = file({ kind: 'becomes', screen: 1, after: 'menu', anchor: ['tableA', 'tableB'] });
+  const shown = makeBeats(anchored, boxes, timing).beats.shots[0].screens;
+  assert.deepEqual(shown, [plain[0], { ...plain[1], pageY: 343 }]);
+  assert.deepEqual(anchorsIn(anchored), [{ from: 'tableA', to: 'tableB' }]);
+  assert.deepEqual(anchorsIn(file({ kind: 'becomes', screen: 1 })), []);
+  assert.throws(() => makeBeats(file({ kind: 'becomes', screen: 1, anchor: 'tableA' }), boxes, timing), /anchor is \[a name on the capture before/);
+  assert.throws(() => makeBeats(file({ kind: 'becomes', screen: 1, anchor: ['tableB', 'tableA'] }), boxes, timing), /second name is on screen 0/);
+  assert.throws(() => makeBeats(file({ kind: 'becomes', screen: 1, anchor: ['tableA', 'nope'] }), boxes, timing), /"nope", which has no measured box/);
+});
+
+test('a page scrolled near its end keeps its scroll while a menu that reaches its bottom is shut (scaled) before it opens: its extent is held', () => {
+  // (the clamp itself, checked in Chrome: a page scrolled to its end, 522 of 922 px, an absolute menu that reaches the
+  // bottom scaled to 0.96 while shut: the extent fell to 910 and the scroll to 510; with the mark, 922 and 522)
+  const added = [], doc = { scrollingElement: { scrollHeight: 922 }, documentElement: { appendChild: (e) => added.push(e) }, createElement: () => ({ style: {}, attrs: {}, setAttribute(k, v) { this.attrs[k] = v; } }) };
+  const pin = holdExtent(doc);
+  assert.deepEqual(added, [pin]);
+  assert.match(pin.style.cssText, /position:absolute;left:0;top:921px;width:1px;height:1px;visibility:hidden;pointer-events:none/);
+});
+
+test('a rebuilt page scrolls instantly: its own scroll-behavior: smooth is overridden, so Measure and the film read the scroll the template set', async () => {
+  // (the fixture check: a page with scroll-behavior: smooth on <html>, recorded at 300, read 0 at Measure and in the
+  // film before this; 300 in both after)
+  const { STILL_PAGE_CSS } = await import('../css.ts');
+  assert.match(STILL_PAGE_CSS, /\*,\*::before,\*::after\{[^}]*scroll-behavior:auto!important/);
+  assert.match(STILL_PAGE_CSS, /html,body\{scroll-behavior:auto!important\}/);
+  assert.match(STILL_PAGE_CSS, /transition:none!important/);
+});
+
+test('extend: a shot shows more of the page below its window: its screen and what it becomes are that much taller, for the framing and for the tools', async () => {
+  const { extendsIn } = await import('../../../tools/measure-boxes.mjs');
+  const timing = T3([['open'], ['the', 'menu'], ['done'], ['and', 'more']]);
+  const file = (b0, more = []) => ({ version: 1, title: 'T', viewport: VP, nodes: {}, chalk: [], beats: [
+    { line: 0, screen: 0, frame: { whole: true }, cursor: 'enter', ...b0 },
+    { line: 1, cursor: 'click', target: 'menu', cue: 'menu', change: { kind: 'becomes', screen: 1, after: 'menu' } }, ...more, { line: 2, cursor: 'leave' }] });
+  const plain = makeBeats(file({}), { menu: BOX }, timing), tall = makeBeats(file({ extend: 300 }), { menu: BOX }, timing);
+  assert.equal(plain.beats.extends, undefined, 'no extend: nothing changes');
+  assert.deepEqual(tall.beats.extends, { 0: 300, 1: 300 }, 'the shot\'s screen and the capture it becomes');
+  assert.deepEqual(plain.beats.shots[0].camera[0].box, { x: 0, y: 0, w: VP.width, h: VP.height });
+  assert.deepEqual(tall.beats.shots[0].camera[0].box, { x: 0, y: 0, w: VP.width, h: VP.height + 300 }, 'the whole framing holds the taller window');
+  // the tools read the beat file the same way (Measure, Probe and the sweep rebuild those screens taller)
+  assert.deepEqual(extendsIn(file({ extend: 300 })), { 0: 300, 1: 300 });
+  assert.deepEqual(extendsIn(file({})), {});
+  // a whole number, 1 to half the recorded height; on the first beat of a whole-screen shot
+  for (const bad of [0, -5, 1.5, '300', VP.height / 2 + 1]) assert.throws(() => makeBeats(file({ extend: bad }), { menu: BOX }, timing), /extend is a whole number of px, 1 to 540/);
+  const late = file({}); late.beats[1].extend = 100;
+  assert.throws(() => makeBeats(late, { menu: BOX }, timing), /extend goes on the first beat of its shot/);
+  assert.throws(() => makeBeats(file({ window: 'menu', extend: 100 }), { menu: BOX }, timing), /extend is for a whole screen/);
+  // one screen, one layout: shown taller on one shot and as recorded on another is refused
+  const again = file({ extend: 300 }, [{ line: 3, screen: 0, frame: { whole: true }, change: { kind: 'page' } }]);
+  again.beats.splice(2, 0, { line: 2, screen: 2, frame: { whole: true }, change: { kind: 'page' } });
+  again.beats = again.beats.filter((b) => b.cursor !== 'leave');
+  assert.throws(() => makeBeats(again, { menu: BOX }, timing), /screen 0 is shown with extend 300 on one shot and 0 on another/);
+});
+
+test('opens of a node on a later capture the shot does not show: a layer over the page, not a swap; its open and close are the layer\'s', async () => {
+  const { extendsIn } = await import('../../../tools/measure-boxes.mjs');
+  const timing = T3([['open'], ['the', 'menu'], ['view', 'it'], ['done']]);
+  const boxes = { menu: BOX, shell: { screen: 0, node: 9, x: 700, y: 200, w: 500, h: 400 }, dialog: { screen: 1, node: 9, x: 700, y: 200, w: 500, h: 400 }, view: { screen: 1, node: 11, x: 900, y: 500, w: 80, h: 30 } };
+  const file = (node, b0 = {}) => ({ version: 1, title: 'T', viewport: VP, nodes: {}, chalk: [], beats: [
+    { line: 0, screen: 0, frame: { whole: true }, cursor: 'enter', ...b0 },
+    { line: 1, cursor: 'click', target: 'menu', cue: 'menu', change: { kind: 'opens', node, after: 'menu' } },
+    { line: 2, frame: { target: node }, cursor: 'click', target: node === 'dialog' ? 'view' : 'menu', cue: 'view', then: [{ cue: 'it', change: { kind: 'close', node } }] },
+    { line: 3, cursor: 'leave' }] });
+  // on the shot's own screen: as ever, no layer
+  const own = makeBeats(file('shell'), boxes, timing).beats.shots[0];
+  assert.equal(own.layers, undefined);
+  assert.deepEqual(own.staging.opens.map((o) => o.node), [9]);
+  // on another capture: the page does not stage it (its copy is a shell); the layer does, as a dialog, from its open
+  const made = makeBeats(file('dialog'), boxes, timing), shot = made.beats.shots[0];
+  assert.deepEqual(shot.screens, undefined, 'no swap');
+  assert.deepEqual(shot.staging.opens, []);
+  assert.deepEqual(shot.staging.closes ?? [], []);
+  assert.equal(shot.layers.length, 1);
+  const [layer] = shot.layers;
+  assert.deepEqual([layer.screen, layer.nodes, layer.staging.opens.map((o) => [o.node, o.from])], [1, [9], [[9, 'centre']]]);
+  assert.ok(Math.abs(layer.from - (layer.staging.opens[0].at - 0.05)) < 1 / 30 + 1e-9);
+  assert.deepEqual(layer.staging.closes.map((c) => [c.node, c.from]), [[9, 'centre']]);
+  assert.deepEqual(layer.staging.presses, shot.staging.presses, 'a control in the dialog is pressed in the layer');
+  // a node in it is a cursor target, through the same camera
+  assert.equal(made.beats.clicks.length, 2);
+  // the layer's capture is rebuilt as tall as its shot
+  assert.deepEqual(makeBeats(file('dialog', { extend: 200 }), boxes, timing).beats.extends, { 0: 200, 1: 200 });
+  assert.deepEqual(extendsIn({ ...file('dialog', { extend: 200 }), nodes: { dialog: [1, 9], menu: [0, 5] } }), { 0: 200, 1: 200 });
+});
+
+test('a dialog drawn as a layer sets in as its whole panel: the outermost ancestor of the node short of its host and of anything window-wide', () => {
+  const body = {}, doc = { defaultView: { innerWidth: 1000, innerHeight: 800 }, body };
+  const box = (width, height, parentElement) => ({ ownerDocument: doc, parentElement, getBoundingClientRect: () => ({ width, height }) });
+  const host = box(1000, 800, body), frame = box(1000, 800, host), card = box(620, 420, frame), content = box(600, 400, card);
+  assert.equal(panelOf(content, host), card, 'the card the page paints, not only its content; never the window-wide frame');
+  assert.equal(panelOf(card, host), card);
+  const plain = box(600, 400, host);
+  assert.equal(panelOf(plain, host), plain, 'a node right under its host is its own panel');
 });

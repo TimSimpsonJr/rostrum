@@ -45,7 +45,7 @@ export function lookOf(doc: Document): { accent: string | null; font: string | n
 }
 
 /** Prints `RT-PROBE:` + JSON { <screen>: { boxes: { <node id>: { x, y, w, h } }, look: { accent, font } } }, boxes in recorded-viewport px. */
-export const Probe: React.FC<{ screens: number[]; windows?: Record<number, number[]> }> = ({ screens, windows = {} }) => {
+export const Probe: React.FC<{ screens: number[]; windows?: Record<number, number[]>; unhides?: Record<number, number[]>; /** screen -> px it is rebuilt taller (`extend`) */ extend?: Record<number, number> }> = ({ screens, windows = {}, unhides = {}, extend = {} }) => {
   const { delayRender, continueRender } = useDelayRender();
   const [handle] = useState(() => delayRender('probe'));
   const got = useRef(new Map<number, { boxes: Record<number, Box>; look: { accent: string | null; font: string | null } }>());
@@ -58,7 +58,7 @@ export const Probe: React.FC<{ screens: number[]; windows?: Record<number, numbe
   return (
     <AbsoluteFill style={{ background: '#fff' }}>
       {screens.map((s) => (
-        <RecordedScreen key={s} screen={s} unclip={windows[s]} style={{ position: 'absolute', left: 0, top: 0 }} prepare={(doc, mirror) => { got.current.set(s, { boxes: boxesOf(doc, mirror), look: lookOf(doc) }); setN(got.current.size); }} />
+        <RecordedScreen key={s} screen={s} extend={extend[s]} unclip={windows[s]} unhide={unhides[s]} style={{ position: 'absolute', left: 0, top: 0 }} prepare={(doc, mirror) => { got.current.set(s, { boxes: boxesOf(doc, mirror), look: lookOf(doc) }); setN(got.current.size); }} />
       ))}
     </AbsoluteFill>
   );

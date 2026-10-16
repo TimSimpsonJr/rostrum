@@ -19,12 +19,12 @@ export const FRAME = { width: W, height: H };
  *  with only node `node` showing, where the page laid it out (`unclip`: in a windowed shot, laid out as the window
  *  is), on its own ground, cropped to its measured `box` (screen px) and drawn `width` px wide (default: its own
  *  width). `write`: staged as the shot's own screen is. One more rebuilt screen for as long as it is mounted. */
-export const Lifted: React.FC<{ screen: number; node: number; box: Box; width?: number; unclip?: number[]; write?: (doc: Document, mirror: any) => void }> = ({ screen, node, box, width, unclip, write }) => {
+export const Lifted: React.FC<{ screen: number; extend?: number; node: number; box: Box; width?: number; unclip?: number[]; write?: (doc: Document, mirror: any) => void }> = ({ screen, extend, node, box, width, unclip, write }) => {
   const k = width != null ? width / box.w : 1;
   return (
     <div style={{ width: box.w * k, height: box.h * k, overflow: 'hidden' }}>
       <div style={{ position: 'relative', width: box.w, height: box.h, transformOrigin: '0 0', transform: `scale(${k.toFixed(5)})` }}>
-        <RecordedScreen screen={screen} isolate={[node]} unclip={unclip} grounded write={write} style={{ position: 'absolute', left: -box.x, top: -box.y }} />
+        <RecordedScreen screen={screen} extend={extend} isolate={[node]} unclip={unclip} grounded write={write} style={{ position: 'absolute', left: -box.x, top: -box.y }} />
       </div>
     </div>
   );
@@ -32,6 +32,12 @@ export const Lifted: React.FC<{ screen: number; node: number; box: Box; width?: 
 
 export const Camera: React.FC<{
   screen: number; standIns?: Rule[]; keys: CamKey[];
+  /** the document's scroll, when not its capture's own (RecordedScreen `pageY`; a whole screen only) */
+  pageY?: number;
+  /** px the screen is rebuilt taller than recorded (RecordedScreen `extend`) */
+  extend?: number;
+  /** a layer over another capture of the same page (RecordedScreen `layer`): no ground, no shadow, no bar of its own */
+  layer?: number[];
   /** the window's own entrance or exit on the stage, on top of the camera: opacity, a scale about the frame's centre, px of rise */
   opacity?: number; scale?: number; rise?: number;
   /** px the window stands to the side of where its camera has it (an open that makes room for the title) */
@@ -51,7 +57,7 @@ export const Camera: React.FC<{
   /** a browser bar at the window's top (moves/browser-bar): `out` 0..1 of it is out of the top edge, and the window is
    *  that much taller, upward (the page keeps its place in the screen's own px; the camera's keys move it on the frame) */
   bar?: { spec: BarSpec; viewport: Size; out: number; hover: number; press: number };
-}> = ({ screen, standIns, keys, opacity: own = 1, scale: size = 1, rise = 0, shift = 0, frame: framed = 1, blur: soft = 0, recede = 0, write, window, isolate, scroll, bar }) => {
+}> = ({ screen, pageY, extend, layer, standIns, keys, opacity: own = 1, scale: size = 1, rise = 0, shift = 0, frame: framed = 1, blur: soft = 0, recede = 0, write, window, isolate, scroll, bar }) => {
   const frame = useCurrentFrame(), cam = cameraAt(keys, frame, FRAME);
   const opacity = own * (1 - 0.6 * recede), scale = size * (1 - 0.1 * recede), blur = soft + 8 * recede;
   const camera = `translate(${(W / 2 - cam.s * cam.cx).toFixed(3)}px, ${(H / 2 - cam.s * cam.cy).toFixed(3)}px) scale(${cam.s.toFixed(6)})`;
@@ -73,17 +79,17 @@ export const Camera: React.FC<{
       // shadow round both; the page itself does not move in the screen's px, so every measured box stays true
       <div style={{ position: 'absolute', left: 0, top: 0, transformOrigin: '0 0', transform: camera }}>
         <div style={{ position: 'absolute', left: 0, top: -up, width: bar.viewport.width, height: bar.viewport.height + up, overflow: 'hidden', background: '#fff', borderRadius: 16 / cam.s, boxShadow: stageShadow(cam.s) }}>
-          <RecordedScreen screen={screen} standIns={standIns} write={write} style={{ position: 'absolute', left: 0, top: up, overflow: 'hidden' }} />
+          <RecordedScreen screen={screen} pageY={pageY} extend={extend} layer={layer} standIns={standIns} write={write} style={{ position: 'absolute', left: 0, top: up, overflow: 'hidden' }} />
           {bar.out > 0 ? <BrowserBar spec={bar.spec} width={bar.viewport.width} out={bar.out} hover={bar.hover} press={bar.press} /> : null}
         </div>
       </div>
     ) : (
     <RecordedScreen
-      screen={screen} standIns={standIns} write={write}
+      screen={screen} pageY={pageY} extend={extend} layer={layer} standIns={standIns} write={write}
       style={{
-        position: 'absolute', left: 0, top: 0, transformOrigin: '0 0', background: '#fff', overflow: 'hidden',
+        position: 'absolute', left: 0, top: 0, transformOrigin: '0 0', background: layer ? 'transparent' : '#fff', overflow: 'hidden',
         transform: camera,
-        borderRadius: 16 / cam.s, boxShadow: stageShadow(cam.s),
+        borderRadius: 16 / cam.s, boxShadow: layer ? 'none' : stageShadow(cam.s),
       }}
     />
     )}

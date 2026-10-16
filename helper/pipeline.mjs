@@ -220,6 +220,27 @@ export async function renderStage(ctx) {
   return { file, seconds: Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds * 10) / 10 : null };
 }
 
+/** A title as a file or folder name: no <>:"/\|?*, control characters and runs of space as one space, no trailing dots
+ *  or spaces, 120 characters at most; '' when nothing is left or the title is a name Windows keeps (CON, NUL, ...). */
+export function safeName(title) {
+  const s = String(title ?? '').replace(/[<>:"/\\|?*]/g, '').replace(/[\s\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 120).replace(/[. ]+$/, '');
+  return s && !/^(con|prn|aux|nul|com\d|lpt\d)$/i.test(s) ? s : '';
+}
+/** A tutorial's title as the approved film's file name (safeName), else its id. */
+export const filmName = (t) => (safeName(t.title) || t.id) + '.mp4';
+
+/** The approved film: the newest render copied to <tutorial>/<title>.mp4 (beside out/, so render numbering and the review
+ *  page's list are untouched), over one of that name; the file a title before it left is removed first. Returns the
+ *  file name, or what was exported before when there is no render to copy. */
+export function exportFilm(P, t) {
+  const last = t.renders.at(-1), from = last && path.join(P.out, path.basename(last));
+  if (!from || !fs.existsSync(from)) return t.exported ?? null;
+  const name = filmName(t);
+  if (t.exported && t.exported !== name && /\.mp4$/i.test(t.exported)) fs.rmSync(path.join(P.root, path.basename(t.exported)), { force: true });
+  fs.copyFileSync(from, path.join(P.root, name));
+  return name;
+}
+
 /** Has anything the sweep read changed since it passed? (the clean copy, the beat file, the boxes, the timing, the rules) */
 export function sweepIsStale(P, sweep) {
   const at = Date.parse(sweep?.at ?? '');
@@ -335,7 +356,13 @@ export function checkRules(body) {
     out.blind.push({ screen: b.screen, node: b.node, as: b.as, ...(b.label != null ? { label: b.label } : {}) });
   }
   for (const f of list('fill')) {
-    if (!f || !str(f.value, 80) || !(str(f.near, 120) || str(f.selector, 200))) throw new StageError('rules: a fill is { near | selector, value }');
+    // { screen, node, value }: that one element on that one screen, named as a blind rule names it
+    if (f && f.node != null) {
+      if (!int(f.screen) || !int(f.node) || !str(f.value, 80) || f.near != null || f.selector != null) throw new StageError('rules: a fill is { near | selector, value } or { screen, node, value }');
+      out.fill.push({ screen: f.screen, node: f.node, value: f.value });
+      continue;
+    }
+    if (!f || !str(f.value, 80) || !(str(f.near, 120) || str(f.selector, 200))) throw new StageError('rules: a fill is { near | selector, value } or { screen, node, value }');
     out.fill.push({ ...(f.near ? { near: f.near } : { selector: f.selector }), value: f.value });
   }
   for (const c of list('chart')) {
@@ -377,17 +404,20 @@ export async function checkAllow(P, allow) {
   });
 }
 
-/** rules.json with `add` folded in: a blind rule for a node replaces the one already there for it; the same fill,
+/** rules.json with `add` folded in: a blind rule (or a fill naming a node) for a node replaces the one already there for it; the same fill,
  *  chart or keep word is not listed twice. Everything else in the file stays as it is. */
 export function mergeRules(have = {}, add) {
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   const blind = [...(have.blind ?? []).filter((b) => !add.blind.some((n) => n.screen === b.screen && n.node === b.node)), ...add.blind];
   const more = (k) => [...(have[k] ?? []), ...(add[k] ?? []).filter((n, i, all) => !(have[k] ?? []).some((h) => same(h, n)) && all.findIndex((m) => same(m, n)) === i)];
+  // a fill naming a node: a later one for the same screen + node replaces the one that was there
+  const atNode = (a, b) => a.node != null && a.screen === b.screen && a.node === b.node;
+  const fill = more('fill').filter((h, i, all) => !all.some((n, j) => j > i && atNode(n, h)));
   const allow = more('allow'), keepColumns = more('keepColumns'), only = more('only'), use = more('use'), blindColumns = more('blindColumns'), blindAll = more('blindAll');
   // one `user` entry per site: a new one for a site replaces the one that was there
   const users = (v) => (Array.isArray(v) ? v : v ? [v] : []), site = (u) => String(u?.host ?? '').toLowerCase();
   const user = [...users(have.user).filter((h) => !(add.user ?? []).some((n) => site(n) === site(h))), ...(add.user ?? []).filter((n, i, all) => all.findLastIndex((m) => site(m) === site(n)) === i)];
-  return { ...have, blind, fill: more('fill'), chart: more('chart'), keep: more('keep'), ...(allow.length ? { allow } : {}), ...(keepColumns.length ? { keepColumns } : {}), ...(only.length ? { only } : {}),
+  return { ...have, blind, fill, chart: more('chart'), keep: more('keep'), ...(allow.length ? { allow } : {}), ...(keepColumns.length ? { keepColumns } : {}), ...(only.length ? { only } : {}),
     ...(use.length ? { use } : {}), ...(user.length ? { user } : {}), ...(blindColumns.length ? { blindColumns } : {}), ...(blindAll.length ? { blindAll } : {}) };
 }
 
@@ -403,7 +433,7 @@ export async function rulesStage(ctx, add) {
   // allow entries change nothing the scrub writes: with nothing else sent, the clean copy is left as it is
   const scrubbing = !(add.allow?.length && add.blind.length + add.fill.length + add.chart.length + add.keep.length + (add.keepColumns?.length ?? 0) + (add.only?.length ?? 0) + (add.use?.length ?? 0) + (add.user?.length ?? 0) + (add.blindColumns?.length ?? 0) + (add.blindAll?.length ?? 0) === 0);
   const report = scrubbing ? await scrubStep(ctx) : { applied: [] };
-  const mine = (a) => add.blind.some((b) => b.screen === a.screen && b.node === a.node);
+  const mine = (a) => [...add.blind, ...add.fill.filter((f) => f.node != null)].some((b) => b.screen === a.screen && b.node === a.node);
   // `kept`: every column the scrub left as recorded on purpose (all of rules.json's keepColumns, not only this call's),
   // so the caller can tell the user exactly what stayed: { screen, table, column, cells, ok }, the rule's words, no cell text
   // (`reason`: why nothing was kept; `keptHeaders`: the other column names of those tables that a rule replaced, by cell node)

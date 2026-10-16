@@ -215,6 +215,7 @@ async function loadTutorial() {
   document.title = `${tutorial.title || 'Review'} · Rostrum`;
   $('approve').hidden = tutorial.state !== 'built';
   $('approved').hidden = !['reviewed', 'done'].includes(tutorial.state); // after Approve the bar says so, in the button's place
+  $('approved').textContent = tutorial.exported ? `Approved · saved as ${tutorial.exported}` : 'Approved';
 }
 
 // ── keys ──

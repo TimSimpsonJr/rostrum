@@ -3,6 +3,13 @@
 import { isStructuralAttr } from './standins.ts';
 
 export const MISSING_MARK = 'about:blank#missing';
+
+/** The sheet every rebuilt page gets before anything is laid out or scrolled (RecordedScreen). A frame is a still:
+ *  the page's own transitions and animations would run on the wall clock, so transitions are off and animations jump
+ *  to their end, where a page may leave things for good (a dropdown's slide ends on the transform that places it).
+ *  Every scroll is instant: a page with `scroll-behavior: smooth` animated each scroll the template set (its recorded
+ *  offset, an anchor's, a scroll box's), and Measure and the film read it part way, at different points. */
+export const STILL_PAGE_CSS = 'noscript{display:none!important} *,*::before,*::after{transition:none!important;animation-duration:0s!important;animation-delay:0s!important;animation-iteration-count:1!important;scroll-behavior:auto!important} html,body{scroll-behavior:auto!important}';
 export const ASSET_PREFIX = 'rostrum-asset:/';
 
 /** Is this attribute value (or url() target) really an asset, and so not text to scrub or sweep? Only: an inlined

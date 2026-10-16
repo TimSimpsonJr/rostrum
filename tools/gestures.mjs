@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { elementsIn, labelOf, walk } from './scrub.mjs';
 import { paths, publicDirOf, removeBundle } from './paths.mjs';
 import { ensureOneOffIndex } from './moves.mjs';
-import { windowsIn } from './measure-boxes.mjs';
+import { extendsIn, unhidesIn, windowsIn } from './measure-boxes.mjs';
 
 // A circle: within 0.4-3 s the pointer turns about one centre through at least 300 degrees in one direction, at a
 // radius that stays within 35% of its mean, between 12 and 400 px. Strength: how closed and how round.
@@ -206,7 +206,8 @@ export async function probe(tutorial, screens) {
   const { selectComposition, renderStill } = await import('@remotion/renderer');
   const P = paths(tutorial), publicDir = publicDirOf(tutorial), root = fileURLToPath(new URL('..', import.meta.url));
   // once a beat file shows a screen as one node's window, that screen is laid out unclipped here too (measure again after writing it)
-  const inputProps = { screens, windows: fs.existsSync(P.beats) ? windowsIn(JSON.parse(fs.readFileSync(P.beats, 'utf8'))) : {} };
+  const beatFile = fs.existsSync(P.beats) ? JSON.parse(fs.readFileSync(P.beats, 'utf8')) : null;
+  const inputProps = { screens, windows: windowsIn(beatFile), unhides: unhidesIn(beatFile), extend: extendsIn(beatFile) };
   let report;
   ensureOneOffIndex();   // (film/src/oneoffs/index.ts must be there for the bundle to resolve)
   const serveUrl = await bundle({ entryPoint: path.join(root, 'film/src/index.ts'), publicDir });

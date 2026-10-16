@@ -102,6 +102,7 @@ export const PURE: Record<string, MoveModule> = {
   'end-card': { about: p7.abouts.find((a) => a.name === 'end-card')! },
   'logo-lift': { about: p7.abouts.find((a) => a.name === 'logo-lift')! },
   'end-glyph': { about: p7.abouts.find((a) => a.name === 'end-glyph')! },
+  'fade': { about: p7.abouts.find((a) => a.name === 'fade')! },
   'light': { about: p7.abouts.find((a) => a.name === 'light')! },
   'dark': { about: p7.abouts.find((a) => a.name === 'dark')! },
   'chalk': { about: p7.abouts.find((a) => a.name === 'chalk')! },

@@ -24,7 +24,7 @@ import { ListPlay, listBlur, listUp } from './list';
 import { NarratedList } from './NarratedList';
 
 import { OPEN } from './beats';
-import { GLYPH, LIFT, Timing, closeOf } from './close';
+import { FADE, GLYPH, LIFT, Timing, closeOf } from './close';
 
 export type { Timing } from './close';
 
@@ -44,13 +44,16 @@ export type Shot = {
   bare?: boolean; frameBack?: number;
   /** the captures the shot shows, in time, when it shows more than its own: the screen becomes its next capture in
    *  place under the same camera (a beat file's `becomes` and `sequence`) */
-  screens?: { at: number; screen: number }[];
+  screens?: { at: number; screen: number; pageY?: number }[];
   /** a browser bar grows out of the window's top and goes back in (moves/browser-bar); `click`: the cursor presses
    *  its hero bookmark at `at` and moves on at `until` */
   bar?: { spec: BarSpec; viewport: Size; play: BarPlay; click: { at: number; until: number } | null };
   /** a scene: no recorded screen (`screen` is -1) and nothing of the camera is drawn; the stage (its own tone, when
    *  given) and the moves of its beats are all there is */
   scene?: { stage?: Tone | StageUse };
+  /** captures of the same page drawn over the shot's own as layers, from `from` (an `opens` of a node measured on a
+   *  capture the shot does not show: a dialog the app filled later): only the layer holding `nodes`, staged by `staging` */
+  layers?: { screen: number; nodes: number[]; from: number; staging: Staging }[];
 };
 /** A library move or a one-off on stage from `from` to `to` (film seconds), on shot `shot`; `pins`: the measured boxes
  *  of the elements its inputs name, in the screen's own px (the move is told where they are on the frame: `place`).
@@ -85,6 +88,11 @@ export type Beats = {
   /** the film ends on a glyph (a beat file's `end`): at `at` the last shot is cut away to node `node` of `screen`
    *  (measured `box`) alone, standing at `rest` on the frame; the end card's mark comes up out of that box */
   glyph?: { screen: number; node: number; box: Box; at: number; rest: Box };
+  /** the film ends on a fade (a beat file's `end`): the last shot holds where it is and fades out over the end card
+   *  as it sets (close.ts FADE); no scale, no rise */
+  fade?: boolean;
+  /** screen -> px it is rebuilt taller than recorded (a beat file's `extend`: beats.ts) */
+  extends?: Record<number, number>;
 };
 
 const BLUR = 6;           // frame px at full: the screen stays recognisable behind the list, its small text softened (18 read as far too heavy)
@@ -110,6 +118,8 @@ export const Template: React.FC<{ brand: Brand; standIns?: Rule[]; title: string
     const on = i === 0 && !beats.open ? tw(t, beats.shots[0].from, beats.shots[0].from + 0.1, EASE.linear) : 1;
     // (a logo lift: the window does not draw back; it is gone over the last of the camera's push toward the logo)
     if (i === last && beats.lift) return { opacity: on * (1 - tw(t, close.endCard - LIFT.fade, close.endCard, EASE.linear)), scale: (0.96 + 0.04 * a) * o.scale, rise: 26 * (1 - a), shift: o.shift };
+    // (a fade: the window gives way by its opacity alone)
+    if (i === last && beats.fade) return { opacity: on * (1 - tw(t, close.windowOut, close.endCard + FADE.lag, EASE.linear)), scale: (0.96 + 0.04 * a) * o.scale, rise: 26 * (1 - a), shift: o.shift };
     // (the entrance is the scale and the rise; the opacity ramp is three frames, never a slow fade of a screen of text)
     return { opacity: on * (1 - l) ** 1.5, scale: (0.96 + 0.04 * a) * (1 - 0.05 * l) * o.scale, rise: 26 * (1 - a) + 10 * l, shift: o.shift };
   };
@@ -125,7 +135,7 @@ export const Template: React.FC<{ brand: Brand; standIns?: Rule[]; title: string
   const use = beats.shots.findLast((s, i) => t >= s.from + toneFrom(i))?.scene?.stage ?? beats.stage ?? beats.tone ?? 'light', tone = toneOf(use);
   const accent = brand.accent ?? TONES[tone].accent, Ground = typeof use === 'string' ? null : STAGES[use.move];
   const ground = Ground && typeof use !== 'string' ? <Ground t={t} tone={tone} accent={accent} inputs={use} /> : undefined;
-  const shows = (shot: Shot, screen: number) => shot.screen === screen || !!shot.screens?.some((x) => x.screen === screen);
+  const shows = (shot: Shot, screen: number) => shot.screen === screen || !!shot.screens?.some((x) => x.screen === screen) || !!shot.layers?.some((l) => l.screen === screen);
   /** where a measured box sits on the frame now, under the camera of the shot that shows its screen: the one up now,
    *  else the first to show it from the play's own shot (`own`) on, else the play's own (null in a scene, and for a
    *  name with no box) */
@@ -150,10 +160,15 @@ export const Template: React.FC<{ brand: Brand; standIns?: Rule[]; title: string
     const own = shows(shot, l.screen);
     // (on a whole screen whose page has scrolled, the element is that much higher in its window)
     const up = own && !shot.window ? scrollAt(shot.scroll, t) : 0;
-    return <Lifted screen={l.screen} node={l.node} box={up ? { ...b, y: b.y - up } : b} width={width} unclip={own ? shot.isolate : undefined} write={(own && writeOf(shot)) || undefined} />;
+    return <Lifted screen={l.screen} extend={beats.extends?.[l.screen]} node={l.node} box={up ? { ...b, y: b.y - up } : b} width={width} unclip={own ? shot.isolate : undefined} write={(own && writeOf(shot)) || undefined} />;
   };
-  const cams: React.ReactNode[] = beats.shots.map((shot, i) => (!shot.scene && t >= shot.from && t < shot.to ? (
-    <Camera key={i} screen={shot.screens?.findLast((x) => x.at <= t)?.screen ?? shot.screen} bar={barAt(shot)} window={shot.window} isolate={shot.isolate} scroll={shot.scroll} standIns={standIns} keys={shot.camera} {...stage(i)} blur={BLUR * recede} recede={under(i)} write={writeOf(shot)} frame={!shot.bare ? 1 : shot.frameBack == null ? 0 : tw(t, shot.frameBack, shot.frameBack + 10 / 30, EASE.settle)} />
+  /** the capture a shot shows now, and its document's scroll when not its own (a `becomes` anchor) */
+  const upOf = (shot: Shot) => shot.screens?.findLast((x) => x.at <= t) ?? { screen: shot.screen, pageY: undefined };
+  /** a shot's layers up now: each a capture of the same page over the shot's own, under the same camera */
+  const layersOf = (shot: Shot, i: number) => (shot.layers ?? []).map((l, k) => (t >= l.from ? <Camera key={`layer${k}`} screen={l.screen} layer={l.nodes} extend={beats.extends?.[l.screen]} keys={shot.camera} {...stage(i)} blur={BLUR * recede} recede={under(i)} write={(doc: Document, mirror: any) => stageChanges(doc, mirror, t, l.staging)} /> : null));
+  const withLayers = (shot: Shot, i: number, cam: React.ReactElement) => (shot.layers?.length ? <React.Fragment key={i}>{cam}{layersOf(shot, i)}</React.Fragment> : cam);
+  const cams: React.ReactNode[] = beats.shots.map((shot, i) => (!shot.scene && t >= shot.from && t < shot.to ? withLayers(shot, i,
+    <Camera key={i} screen={upOf(shot).screen} extend={beats.extends?.[upOf(shot).screen]} pageY={upOf(shot).pageY} bar={barAt(shot)} window={shot.window} isolate={shot.isolate} scroll={shot.scroll} standIns={standIns} keys={shot.camera} {...stage(i)} blur={BLUR * recede} recede={under(i)} write={writeOf(shot)} frame={!shot.bare ? 1 : shot.frameBack == null ? 0 : tw(t, shot.frameBack, shot.frameBack + 10 / 30, EASE.settle)} />
   ) : null));
   const drags = beats.drags ?? [];
   const cursor = <Cursor start={beats.cursor.start} moves={beats.cursor.moves} clicks={beats.clicks} holds={drags.map((d) => [d.from, d.release])} />;
@@ -168,7 +183,7 @@ export const Template: React.FC<{ brand: Brand; standIns?: Rule[]; title: string
     return (
       <div key={`drag${i}`} style={{ position: 'absolute', left: 0, top: 0, transformOrigin: `${(d.grab.x * s).toFixed(2)}px ${(d.grab.y * s).toFixed(2)}px`, transform: `translate(${(p.x + w.x - d.grab.x * s).toFixed(3)}px, ${(p.y + w.y - d.grab.y * s).toFixed(3)}px) scale(${(1 + 0.03 * air).toFixed(5)})` }}>
         <div style={{ position: 'absolute', inset: 0, borderRadius: 6 * s, boxShadow: liftShadow(tone), opacity: air }} />
-        <Lifted screen={d.screen} node={d.node} box={up ? { ...d.box, y: d.box.y - up } : d.box} width={d.box.w * s} unclip={shot.isolate} write={shot.staging && ((doc: Document, mirror: any) => stageChanges(doc, mirror, t, { ...shot.staging!, hides: undefined }))} />
+        <Lifted screen={d.screen} extend={beats.extends?.[d.screen]} node={d.node} box={up ? { ...d.box, y: d.box.y - up } : d.box} width={d.box.w * s} unclip={shot.isolate} write={shot.staging && ((doc: Document, mirror: any) => stageChanges(doc, mirror, t, { ...shot.staging!, hides: undefined }))} />
       </div>
     );
   });
@@ -201,7 +216,7 @@ export const Template: React.FC<{ brand: Brand; standIns?: Rule[]; title: string
     <div style={{ position: 'absolute', left: 0, top: 0, width: g.rest.w, height: g.rest.h, transform: `translate(${g.rest.x.toFixed(3)}px, ${g.rest.y.toFixed(3)}px)`, opacity: 1 - tw(t, glyphGone - GLYPH.fade, glyphGone, EASE.linear) }}>
       <div style={{ position: 'absolute', inset: 0, borderRadius: 14, boxShadow: liftShadow(tone) }} />
       <div style={{ position: 'absolute', inset: 0, borderRadius: 14, overflow: 'hidden' }}>
-        <Lifted screen={g.screen} node={g.node} box={g.box} width={g.rest.w} write={(doc: Document, mirror: any) => stageChanges(doc, mirror, t, { ...(ending.staging ?? { opens: [], presses: [], selects: [] }), glyph: { node: g.node, at: g.at, over: GLYPH.apart } })} />
+        <Lifted screen={g.screen} extend={beats.extends?.[g.screen]} node={g.node} box={g.box} width={g.rest.w} write={(doc: Document, mirror: any) => stageChanges(doc, mirror, t, { ...(ending.staging ?? { opens: [], presses: [], selects: [] }), glyph: { node: g.node, at: g.at, over: GLYPH.apart } })} />
       </div>
     </div>
   ) : null;

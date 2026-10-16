@@ -51,11 +51,12 @@ export function collect(doc: Document, mirror: { getId(n: Node): number }): Seen
   return out;
 }
 
-/** `nodes`: name -> [screen, node id] to measure. `windows`: the screens laid out as a window (`unclip`). `isolate`:
+/** `nodes`: name -> [screen, node id] to measure. `windows`: the screens laid out as a window (`unclip`). `unhides`: the
+ *  nodes each screen holds hidden that the film displays (`unhide`). `isolate`:
  *  the screens the film shows only as a window, and the nodes that show of each (tools/sweep.mjs `isolatedIn`): built
  *  as Camera builds a windowed shot, so everything else is `visibility:hidden` and is reported `hidden`. A stylesheet
  *  is still reported as showing whatever it applies to. */
-export const Sweep: React.FC<{ screens: number[]; nodes?: Record<string, [number, number]>; windows?: Record<number, number[]>; isolate?: Record<number, number[]> }> = ({ screens, nodes = {}, windows = {}, isolate = {} }) => {
+export const Sweep: React.FC<{ screens: number[]; nodes?: Record<string, [number, number]>; windows?: Record<number, number[]>; unhides?: Record<number, number[]>; isolate?: Record<number, number[]>; /** screen -> px it is rebuilt taller (`extend`): what the film shows */ extend?: Record<number, number> }> = ({ screens, nodes = {}, windows = {}, unhides = {}, isolate = {}, extend = {} }) => {
   const { delayRender, continueRender } = useDelayRender();
   const [handle] = useState(() => delayRender('sweep'));
   const got = useRef(new Map<number, { seen: Seen[]; boxes: Record<string, object> }>());
@@ -69,7 +70,7 @@ export const Sweep: React.FC<{ screens: number[]; nodes?: Record<string, [number
     <AbsoluteFill style={{ background: '#fff' }}>
       {screens.map((s) => (
         <RecordedScreen
-          key={s} screen={s} isolate={isolate[s]} unclip={windows[s]} style={{ position: 'absolute', left: 0, top: 0 }}
+          key={s} screen={s} extend={extend[s]} isolate={isolate[s]} unclip={windows[s]} unhide={unhides[s]} style={{ position: 'absolute', left: 0, top: 0 }}
           prepare={(doc, mirror) => {
             const boxes: Record<string, object> = {};
             for (const [name, [screen, node]] of Object.entries(nodes)) {

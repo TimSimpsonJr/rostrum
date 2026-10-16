@@ -60,20 +60,28 @@ test('state file: written whole and read back; a recording without one is adopte
     fs.writeFileSync(path.join(a, 'recording', 'events.ndjson'), JSON.stringify({ type: 4, data: { href: 'https://app.site.test/people/42?token=abc', width: 10, height: 10 }, timestamp: 1 }) + '\n');
     fs.mkdirSync(path.join(a, 'recording', 'assets'), { recursive: true });
     fs.mkdirSync(b, { recursive: true });
-    writeTutorial(b, { ...T('built'), title: 'B', renders: ['v1.mp4'] });
+    writeTutorial(b, { ...T('built'), id: 'rec-200', title: 'B', renders: ['v1.mp4'] });
+    const titled = path.join(home, 'Find a payee\'s key (2)');                          // a titled tutorial's folder: named after its title
+    writeTutorial(titled, { ...T('scripted'), id: 'rec-300', title: 'Find a payee\'s key' });
+    fs.mkdirSync(path.join(home, 'Not a tutorial', 'recording'), { recursive: true });  // a recording in a folder not named as an id: never adopted
+    fs.writeFileSync(path.join(home, 'Not a tutorial', 'recording', 'events.ndjson'), '{}\n');
     fs.mkdirSync(path.join(home, 'Brands', 'recording'), { recursive: true });        // reserved: never a tutorial
     fs.writeFileSync(path.join(home, 'Brands', 'recording', 'events.ndjson'), '{}\n');
     fs.mkdirSync(path.join(home, 'empty'));                                             // no recording, no state file
     assert.equal(siteOf(a), 'app.site.test');                                           // the host only: no path, no query
     const list = listTutorials(home);
-    assert.deepEqual(list.map((t) => t.id).sort(), ['rec-100', 'rec-200']);
+    assert.deepEqual(list.map((t) => t.id).sort(), ['rec-100', 'rec-200', 'rec-300']);
+    assert.equal(list.find((t) => t.id === 'rec-300').dir, titled);                      // the list says which folder holds each
+    assert.ok(!fs.existsSync(path.join(home, 'Not a tutorial', 'tutorial.json')));
     const adopted = list.find((t) => t.id === 'rec-100');
     assert.equal(adopted.state, 'recorded');
     assert.equal(adopted.site, 'app.site.test');
     assert.equal(adopted.flags.noMic, true);                                            // no microphone file at all
     assert.ok(!JSON.stringify(adopted).includes('token'));
     assert.equal(readTutorial(b).title, 'B');
-    assert.equal(readTutorial(b).id, 'rec-200');                                        // the folder's name, whatever the file says
+    assert.equal(readTutorial(titled).id, 'rec-300');                                   // the id the state file keeps, whatever the folder is called
+    fs.writeFileSync(path.join(b, 'tutorial.json'), JSON.stringify({ state: 'built' })); // a state file with no id: the folder's name
+    assert.equal(readTutorial(b).id, 'rec-200');
     assert.equal(readTutorial(path.join(home, 'empty')), null);
     assert.equal(adopt(path.join(home, 'empty')), null);
     fs.writeFileSync(path.join(a, 'recording', 'mic.webm'), Buffer.alloc(20 * 1024));

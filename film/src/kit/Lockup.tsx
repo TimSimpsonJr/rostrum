@@ -14,6 +14,7 @@ import type { Tone } from './stage';
 import { resolveLook } from './look';
 import { Build, MarkBuild, readBuild } from './MarkBuild';
 import { SWEEP_AT } from './markTiming.ts';
+import { FIT, fitTitle } from './titleFit.ts';
 
 export type Brand = {
   name: string | null;
@@ -64,7 +65,8 @@ export const BrandMark: React.FC<{ brand: Brand; cy: number; o?: number; dy?: nu
   );
 };
 
-/** The open: the title rises into place through a mask and settles, holds, and clears upward from `leave` (gone 0.6 s later). */
+/** The open: the title rises into place through a mask and settles, holds, and clears upward from `leave` (gone 0.6 s later).
+ *  A title too wide for the frame is set on two lines, and smaller if it must (titleFit.ts). */
 export const TitleCard: React.FC<{ t: number; title: string; leave: number; tone?: Tone; /** the title beside a window that has made room for it: flush left in a column `w` px wide from `x`, in over 0.3 s from `from`, gone `clear` s after `leave`; no rise, no travel */ beside?: { from: number; clear: number; x: number; w: number } }> = ({ t, title, leave, tone = 'light', beside }) => {
   if (beside) {
     const o = tw(t, beside.from, beside.from + 0.3, EASE.linear) * (1 - tw(t, leave, leave + beside.clear, EASE.linear));
@@ -77,10 +79,10 @@ export const TitleCard: React.FC<{ t: number; title: string; leave: number; tone
   }
   const out = tw(t, leave, leave + 0.6, EASE.settle);
   if (out >= 1) return null;
-  const size = 116, line = size * 1.12, rise = 1 - (1 - clamp01((t - 0.25) / 0.8)) ** 3, drop = line * (1 - rise);
+  const { lines, size } = fitTitle(title, 116, FIT * W, -0.035), line = size * 1.12, high = line * lines.length, rise = 1 - (1 - clamp01((t - 0.25) / 0.8)) ** 3, drop = high * (1 - rise);
   return (
-    <div style={{ position: 'absolute', left: 0, top: 0, width: W, height: line, overflow: 'hidden', transform: place(0, H / 2 - line / 2 - 8 - 26 * out), opacity: 1 - out }}>
-      <div style={{ width: W, textAlign: 'center', fontSize: size, lineHeight: `${line}px`, fontWeight: 300, letterSpacing: '-0.035em', color: TONES[tone].ink, whiteSpace: 'nowrap', transform: place(0, drop) }}>{title}</div>
+    <div style={{ position: 'absolute', left: 0, top: 0, width: W, height: high, overflow: 'hidden', transform: place(0, H / 2 - high / 2 - 8 - 26 * out), opacity: 1 - out }}>
+      <div style={{ width: W, textAlign: 'center', fontSize: size, lineHeight: `${line}px`, fontWeight: 300, letterSpacing: '-0.035em', color: TONES[tone].ink, whiteSpace: 'nowrap', transform: place(0, drop) }}>{lines.map((l, i) => <div key={i}>{l}</div>)}</div>
     </div>
   );
 };
@@ -89,7 +91,7 @@ export const TitleCard: React.FC<{ t: number; title: string; leave: number; tone
  *  built there instead (whole by BUILD s: from then on the file as it is, the same element), then swept from SWEEP_AT. The template times it so
  *  that the narration's closing line is spoken over this (tutorial/close.ts).
  *  With no mark (no brand, or a brand without one) the card is text only: the tutorial's title alone, in the title
- *  card's type at 72 px, setting the same way. No name of a site or a product is shown that the film was not given. */
+ *  card's type at 72 px (two lines, or smaller, when it must: titleFit.ts), setting the same way. No name of a site or a product is shown that the film was not given. */
 export const EndCard: React.FC<{ brand: Brand; t: number; at: number; title?: string; tone?: Tone; from?: { x: number; y: number; w: number; h: number } }> = ({ brand, t, at, title, tone = 'light', from }) => {
   const k = tw(t, at, at + 0.7, EASE.settle), u = t - at, mark = brand.mark;
   // A logo lift (`from`: where the recorded site's own logo is on the frame as the camera's push arrives): the
@@ -109,6 +111,6 @@ export const EndCard: React.FC<{ brand: Brand; t: number; at: number; title?: st
   if (mark?.build) return <BrandMark brand={brand} cy={H / 2} sweep={clamp01((u - SWEEP_AT) / 0.66)} under={<MarkBuild build={mark.build} w={mark.width} h={mark.width * mark.aspect} cy={H / 2} u={u} />} />;
   if (brand.mark) return <BrandMark brand={brand} cy={H / 2} o={k} dy={14 * (1 - k)} sweep={clamp01((t - (at + 1.15)) / 0.66)} />;
   if (!title) return null;
-  const size = 72, line = size * 1.12;
-  return <div style={{ position: 'absolute', left: 0, top: 0, width: W, textAlign: 'center', fontSize: size, lineHeight: `${line}px`, fontWeight: 300, letterSpacing: '-0.035em', color: TONES[tone].ink, whiteSpace: 'nowrap', opacity: k, transform: place(0, H / 2 - line / 2 + 14 * (1 - k)) }}>{title}</div>;
+  const { lines, size } = fitTitle(title, 72, FIT * W, -0.035), line = size * 1.12, high = line * lines.length;
+  return <div style={{ position: 'absolute', left: 0, top: 0, width: W, textAlign: 'center', fontSize: size, lineHeight: `${line}px`, fontWeight: 300, letterSpacing: '-0.035em', color: TONES[tone].ink, whiteSpace: 'nowrap', opacity: k, transform: place(0, H / 2 - high / 2 + 14 * (1 - k)) }}>{lines.map((l, i) => <div key={i}>{l}</div>)}</div>;
 };

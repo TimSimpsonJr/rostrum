@@ -321,7 +321,10 @@ flat chart) and the film shows those screens, give them plausible, **clearly fak
 ```
 
 - `near`: the label's text exactly as the interface shows it; the figure beside that label is replaced. Or
-  `selector` (tag, `#id`, `.class`, `[attr=value]`, descendant) for an element with no label.
+  `selector` (tag, `#id`, `.class`, `[attr=value]`, descendant) for an element with no label (every match is filled).
+- `{ "screen": 3, "node": 812, "value": "Dana Reyes" }`: exactly that one element on that one screen, as a blind rule
+  names it. Use it for one cell, or a name the film's own authored pieces must match; the answer's `applied` says
+  whether it was found (`ok: false`: no such node on that screen). A later one for the same screen and node replaces it.
 - **The values must agree with each other.** Work them out together, once per film:
   a total equals a count times an average (48 x $250.00 = $12,000.00); a chart's values add up to the total they
   chart (the twelve months above add up to 48); a "this month" figure is one of the chart's months times the

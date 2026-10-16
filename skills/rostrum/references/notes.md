@@ -78,3 +78,4 @@ For each note:
 Then tell the user in chat: per note, one line on what changed or why not; the new render's name; that the review
 page shows it. When the user says the film is right in chat, `helper.mjs event <id> reviewed` (Approve on the page
 does the same, so check the state first); **Done** in the panel closes it.
+Either way the newest render is saved as `<Title>.mp4` in the tutorial's folder (the state's `exported`); tell the user where.

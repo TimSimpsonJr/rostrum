@@ -3,7 +3,8 @@
 //   { id, title: string|null, site: string (host only), brand: string|null, state, busy: Stage|null,
 //     error: { stage, message }|null, flags: { noMic }, renders: string[], sweep: { ok, at, fails }|null,
 //     progress: { phase, label, pct, note, at }|null (a long step's place on the panel's bar: helper/progress.mjs),
-//     archived: boolean, length: number|null (seconds of the last render), updatedAt }
+//     archived: boolean, length: number|null (seconds of the last render),
+//     exported: string|null (the approved film's file name in the tutorial folder: helper/pipeline.mjs exportFilm), updatedAt }
 //   state: recorded -> scripted -> approved -> voiced -> built -> reviewed -> done
 //   Stage: prepare | transcribe | time | measure | stills | sweep | render
 // A failed stage keeps the state and records the error; the error never carries page text (stage names, exit codes
@@ -36,16 +37,21 @@ export function transition(t, event, extra = {}) {
   return at(rule[1]);
 }
 
-const fresh = (id) => ({ id, title: null, site: '', brand: null, state: 'recorded', busy: null, error: null, flags: { noMic: false }, renders: [], sweep: null, progress: null, archived: false, length: null, updatedAt: new Date().toISOString() });
+const fresh = (id) => ({ id, title: null, site: '', brand: null, state: 'recorded', busy: null, error: null, flags: { noMic: false }, renders: [], sweep: null, progress: null, archived: false, length: null, exported: null, updatedAt: new Date().toISOString() });
 
-/** The state file of a tutorial folder, or null when it has none (or one that cannot be read). The id is the folder's name. */
+/** The state file of a tutorial folder, or null when it has none (or one that cannot be read). The id is the one the
+ *  state file keeps (the recording's name, given when it arrived); a file without one is named by its folder. A titled
+ *  tutorial's folder is named after its title, not its id (helper/server.mjs `nameFolder`). */
 export function readTutorial(dir) {
   const P = paths(dir);
   let t;
   try { t = JSON.parse(fs.readFileSync(P.state, 'utf8')); } catch { return null; }
   if (!t || typeof t !== 'object' || !STATES.includes(t.state)) return null;
-  return { ...fresh(P.name), ...t, id: P.name, flags: { noMic: false, ...(t.flags ?? {}) }, renders: Array.isArray(t.renders) ? t.renders : [],
-    progress: t.progress && typeof t.progress === 'object' ? t.progress : null, archived: t.archived === true, length: Number.isFinite(t.length) ? t.length : null };
+  const id = ID.test(String(t.id ?? '')) ? t.id : P.name;
+  if (!ID.test(id)) return null;
+  return { ...fresh(id), ...t, id, flags: { noMic: false, ...(t.flags ?? {}) }, renders: Array.isArray(t.renders) ? t.renders : [],
+    progress: t.progress && typeof t.progress === 'object' ? t.progress : null, archived: t.archived === true, length: Number.isFinite(t.length) ? t.length : null,
+    exported: typeof t.exported === 'string' ? t.exported : null };
 }
 
 /** Writes the state file whole: a temp file beside it, then a rename (Windows may hold the target for a moment). */
@@ -96,15 +102,16 @@ export function adopt(dir, now = Date.now()) {
   return writeTutorial(dir, { ...fresh(P.name), site: siteOf(dir), flags: { noMic: noMic(dir) } });
 }
 
-/** Every tutorial of the tutorials folder: each folder with a state file, and each with a recording and none (adopted). */
+/** Every tutorial of the tutorials folder: each folder with a state file (named by its id, or by its title), and each
+ *  folder named as an id with a recording and no state file (adopted). */
 export function listTutorials(home) {
   let names = [];
   try { names = fs.readdirSync(home, { withFileTypes: true }); } catch { return []; }
   const out = [];
   for (const d of names) {
-    if (!d.isDirectory() || !ID.test(d.name) || RESERVED.has(d.name.toLowerCase())) continue;
-    const dir = path.join(home, d.name), t = readTutorial(dir) ?? adopt(dir);
-    if (t) out.push(t);
+    if (!d.isDirectory() || d.name.startsWith('.') || RESERVED.has(d.name.toLowerCase())) continue;
+    const dir = path.join(home, d.name), t = readTutorial(dir) ?? (ID.test(d.name) ? adopt(dir) : null);
+    if (t) out.push({ ...t, dir });
   }
   return out.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
 }

@@ -35,7 +35,8 @@ export type Around = { also?: Box[]; pieces?: Box[] };
 /** A measured node (clean/boxes.json). `row`, `group`: the boxes of its row and of its nearest group, when the
  *  measuring found them. `spot`: where in the box (shares of its width and height) a cursor's tip can rest without
  *  sitting on the control's letters. */
-export type Measured = Box & { screen: number; node: number; row?: Box; group?: Box; spot?: [number, number] };
+/** `pageY`: the document scroll its screen was measured at, when not its capture's own (a `becomes` anchor: Measure) */
+export type Measured = Box & { screen: number; node: number; row?: Box; group?: Box; spot?: [number, number]; pageY?: number };
 export type Boxes = Record<string, Measured>;
 export type Framing = { box: Box; fill: number; scale: number };
 

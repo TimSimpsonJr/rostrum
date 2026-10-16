@@ -19,7 +19,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { cellJudge, keptByWord, setUiText, staysAsRecorded } from './scrub.mjs';
 import { assertPublicDir, paths, publicDirOf } from './paths.mjs';
-import { windowsIn } from './measure-boxes.mjs';
+import { extendsIn, unhidesIn, windowsIn } from './measure-boxes.mjs';
 
 export { setUiText, staysAsRecorded }; // "counts, percentages, dates and UI text stay as recorded": the scrub's rule (tools/scrub.mjs), used here too
 const norm = (s) => s.replace(/\s+/g, ' ').trim().toLowerCase();
@@ -243,7 +243,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   // a windowed screen is read as the film lays it out (`windows`) and, when the film shows it no other way, as the
   // film draws it: only the window's nodes showing (`isolate`: isolatedIn, above)
   const isolate = isolatedIn(beatFile);
-  const inputProps = { screens, nodes, windows: windowsIn(beatFile), isolate };
+  const inputProps = { screens, nodes, windows: windowsIn(beatFile), unhides: unhidesIn(beatFile), isolate, extend: extendsIn(beatFile) };
   let report;
   // the tutorial's one-off moves go into the bundle first; one that reads outside itself fails the sweep (file names and the patterns hit: no page text)
   try { await (await import('./one-offs.mjs')).syncOneOffs(tutorial); } catch (e) { console.log(`FAIL  ${String(e?.message ?? e)}`); leave(1); }

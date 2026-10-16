@@ -226,6 +226,18 @@ test('fill rules go last and are not rewritten; chart values are redrawn with a 
   assert.ok(changed.some((c) => c.kind === 'fill') && changed.some((c) => c.kind === 'chart'));
 });
 
+test('a fill can name one node on one screen: only that element is written, and it answers as a blind rule does', () => {
+  const page = () => el('html', {}, el('body', {}, el('td', { id: 'a' }, tx('Ines Marlow')), el('td', { id: 'b' }, tx('Ines Marlow')), el('input', { id: 'f', value: 'Harbor' })));
+  const tree = page(), a = byId(tree, 'a'), f = byId(tree, 'f');
+  const json = { fill: [{ screen: 2, node: a.id, value: 'Dana Reyes' }, { screen: 2, node: f.id, value: 'Acme' }, { screen: 2, node: 99999, value: 'x' }, { screen: 3, node: byId(tree, 'b').id, value: 'Other' }] };
+  const out = scrub(tree, rulesFor(json, 2), makeLedger(), {});
+  assert.equal(textOf(a), 'Dana Reyes');
+  assert.equal(f.attributes.value, 'Acme');
+  assert.equal(textOf(byId(tree, 'b')), 'Ines Marlow', 'the same text elsewhere, and a fill for another screen, are left alone');
+  assert.deepEqual(out.applied, [{ ok: true, node: a.id, tag: 'td', length: 11, kind: 'fill' }, { ok: true, node: f.id, tag: 'input', length: 6, kind: 'fill' }, { ok: false, node: 99999, reason: 'no such node' }]);
+  assert.ok(out.changed.some((c) => c.id === f.id && c.kind === 'fill'));
+});
+
 test('changed records every replaced node with its kind, and never the text', () => {
   const tree = page(), before = JSON.parse(JSON.stringify(tree));
   const { changed } = scrub(tree, ALL, makeLedger(), { user: findSignedInUser(tree) });

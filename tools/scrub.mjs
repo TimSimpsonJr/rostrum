@@ -269,7 +269,7 @@ export function rulesFor(json = {}, screen, { dropBlind, dropDefault, host } = {
     ...DEFAULT_RULES.filter((_, i) => i !== dropDefault),
     ...[...new Set(Array.isArray(json.use) ? json.use : [])].map((name) => OPT_IN[name]).filter(Boolean),
     ...((json.keep ?? []).length ? [{ kind: 'keep', words: json.keep }] : []),
-    ...(json.fill ?? []).map((f) => ({ kind: 'fill', ...f })),
+    ...(json.fill ?? []).map((f) => ({ kind: 'fill', ...f })).filter((f) => f.node == null || screen == null || f.screen === screen),
     ...(json.chart ?? []).map((c) => ({ kind: 'chart', ...c })),
   ];
 }
@@ -908,6 +908,13 @@ export function scrub(tree, rules = DEFAULT_RULES, ledger = makeLedger(), opts =
       }
     });
     else if (r.selector) for (const el of select(tree, r.selector, tree)) fill(el, r.value);
+    else if (r.node != null) { // one element on one screen, answered as a blind rule is
+      const el = findById(tree, r.node);
+      if (!el || el.type !== ELEMENT) { applied.push({ ok: false, node: r.node, reason: 'no such node' }); continue; }
+      const length = (attr(el, 'value') ?? texts(el, true).map((t) => t.textContent).join('')).trim().length;
+      fill(el, r.value);
+      applied.push({ ok: true, node: r.node, tag: el.tagName, length, kind: 'fill' });
+    }
   }
   for (const r of rules.filter((x) => x.kind === 'chart')) for (const svg of select(tree, r.selector, tree)) for (const n of redrawLineChart(svg, r.values, tree, newText) || []) mark(n, 'chart');
 

@@ -326,6 +326,7 @@ The frame dims around a soft-edged window on one element for a beat, then lifts:
 | input | what |
 |---|---|
 | `target` | a name in `nodes`: the element kept lit |
+| `tight` | true: the lit window is the element's box exactly, with a 4 px feather (a table row lit and nothing past it; default: grown a tenth each way, a 12 px feather) |
 | `at` | the cue the dim comes on (default: the line start) |
 | `until` | the cue it lifts by (default: the line end, or 1.2 s after) |
 
@@ -781,6 +782,7 @@ A menu or dialog shut until the click on `after`, then uncovered from its top ed
 |---|---|
 | `node` | a name |
 | `after` | the name clicked |
+| `unhide` | optional: true when the capture holds it display:none (a hover menu): the film displays it, so it and its items measure |
 
 ```json
 {"change":{"kind":"opens","node":"menu","after":"userMenu"}}
@@ -1021,6 +1023,21 @@ The way into the end card from a glyph of the subject: a hard cut to one named e
 
 ```json
 {"end":{"move":"end-glyph","glyph":"card"}}
+```
+
+### fade
+
+The way into the end card by a fade alone: the last shot holds exactly where it is (the camera stands still, the window neither scales nor rises) and fades out while the end card sets in; the mark builds or sets as ever. For a film that should end without more motion.
+
+- use: `end`; takes: the camera stands still from when the window would have started to leave; the window fades over 0.8 s from then, 0.3 s of it over the end card as it sets. The close's own times do not change
+- reads: nothing more of the screen; authored text: none
+
+| input | what |
+|---|---|
+| `end` | the file's `end`: { "move": "fade" } |
+
+```json
+{"end":{"move":"fade"}}
 ```
 
 ### chalk

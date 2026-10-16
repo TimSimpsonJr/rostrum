@@ -7,11 +7,11 @@ import { withHelper, record } from '../../helper/test-helpers.mjs';
 const JSONH = { 'content-type': 'application/json' };
 
 test('versions, notes across versions, fixedIn, the three statuses, and the tutorial route', () => withHelper({}, async ({ home, get, call }) => {
-  const dir = record(home, 'rec-1');
+  let dir = record(home, 'rec-1');
   fs.mkdirSync(path.join(dir, 'out'), { recursive: true });
   for (const v of ['v1', 'v2']) fs.writeFileSync(path.join(dir, 'out', `${v}.mp4`), `film ${v}`);
   fs.writeFileSync(path.join(dir, 'out', 'sweep.txt'), 'SWEEP PASSED');
-  await call('POST', '/tutorials/rec-1/state', { event: 'scripted', title: 'Find your API credentials' }, JSONH);
+  dir = (await call('POST', '/tutorials/rec-1/state', { event: 'scripted', title: 'Find your API credentials' }, JSONH)).json.dir; // the folder takes the title; the review routes keep the id
   const videos = (await get('/review/rec-1/api/videos')).json;
   assert.deepEqual(videos.versions.map((v) => [v.name, v.path]), [['v1', 'out/v1.mp4'], ['v2', 'out/v2.mp4']]);
   assert.ok(typeof videos.versions[0].mtime === 'number');

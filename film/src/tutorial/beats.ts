@@ -10,7 +10,7 @@ import { cameraAt, cameraFaults, project, scrollAt } from './cameraAt.ts';
 import type { Box, CamKey, Scroll, Size } from './cameraAt.ts';
 import { cursorAt } from './cursorPath.ts';
 import type { Move, Stop } from './cursorPath.ts';
-import { GLYPH, LIFT, closeOf } from './close.ts';
+import { FADE, GLYPH, LIFT, closeOf } from './close.ts';
 import type { Timing } from './close.ts';
 import { FRAME, STEP, drifted, frameFor, mostScale, moveSeconds, union, windowHeight } from './framing.ts';
 import type { Around, Boxes, FrameSpec, Framing } from './framing.ts';
@@ -37,7 +37,8 @@ export type Scene = { stage?: Tone | StageUse };
 export const SCENE = -1;   // the screen number of a scene shot
 /** What a move is, by name: the registry's (moves/index.ts) in the film, tools/moves.mjs's in node. */
 export type MoveOf = (name: string) => MoveModule | null;
-/** `opens`: `node` is shut until the click on `after`, then opens. `page`: the beat's screen replaces the one before
+/** `opens`: `node` is shut until the click on `after`, then opens (`unhide`: the capture holds it hidden, a hover menu with
+ *  display:none; every screen that holds it is laid out with it displayed: tools/measure-boxes.mjs `unhidesIn`). `page`: the beat's screen replaces the one before
  *  (a cut). `selects`: the value of `node` shows as selected from the click on it; with `to` (a block: a table) the
  *  selection runs down it from the beat's cue to the cue `to`, following the cursor. `scrolls`: the content of the
  *  shot's window scrolls, in one eased move, to its bottom, its top, or until the named node is near the window's
@@ -48,11 +49,14 @@ export type MoveOf = (name: string) => MoveModule | null;
  *  `becomes`: the shot's screen becomes a later capture of the same page, in place, under the same camera: 0.3 s after
  *  the click on `after` (else after the cue, else with the line). `grows`: [a name on the screen before, a name on the
  *  new one] of one element whose box changes with it: it is carried from the one box to the other, uncovered as it goes. */
-export type Change = { kind: 'opens'; node: string; after?: string } | { kind: 'page' } | { kind: 'selects'; node: string; to?: Cue } | { kind: 'scrolls'; to: string }
+export type Change = { kind: 'opens'; node: string; after?: string; unhide?: boolean } | { kind: 'page' } | { kind: 'selects'; node: string; to?: Cue } | { kind: 'scrolls'; to: string }
   | { kind: 'fills'; node: string; typed?: boolean; text?: string | string[]; to?: Cue }
   /** `wait`: the page took its time to answer (a save): the capture comes as long after the click (or the word) as
    *  the recording took from the capture before it to it, 2 s at most, and the line after is given that much more air */
-  | { kind: 'becomes'; screen: number; after?: string; grows?: [string, string]; wait?: boolean }
+  /** `anchor`: [a name on the capture before, a name on the new one] of one element both hold (a table): the new
+   *  capture is scrolled by however far that element sits lower on it than on the one before, so it stays where it
+   *  was and nothing jumps at the swap (Measure measures the new capture so scrolled: its `pageY`) */
+  | { kind: 'becomes'; screen: number; after?: string; grows?: [string, string]; wait?: boolean; anchor?: [string, string] }
   /** `close`: `node` (a menu, a dialog) goes the way it came, from the beat's cue (else its line's start), and is not seen again until its next `opens` on the shot */
   | { kind: 'close'; node: string }
   /** `hover`: `node` (a tip, a menu) is there only while the pointer is over `after`: uncovered when the cursor
@@ -77,8 +81,11 @@ export type Sequence = { from: number; watch?: number; then?: number[]; /** a sc
  *  RecordedScreen `unclip`), through a window on the stage of an ordinary shape; what is taller scrolls (`scrolls`).
  *  `bar`: a browser bar grows out of the window's top under this beat's line and goes back in after it
  *  (moves/browser-bar); its hero bookmark is the cursor target "bar:hero". `sequence`: above.
- *  `bare` (with `window`): the elements stand on the stage with no window frame and no shadow, until a `frame-back`. */
-export type Beat = Partial<Action> & { line: number; screen?: number; window?: string | string[]; bare?: boolean; frame?: FrameSpec; then?: Partial<Action>[]; list?: ListSpec; bar?: BarSpec; sequence?: Sequence; moves?: MoveUse[]; cut?: CutUse; scene?: Scene };
+ *  `bare` (with `window`): the elements stand on the stage with no window frame and no shadow, until a `frame-back`.
+ *  `extend` (on the first beat of a whole-screen shot): px more of the page below the recorded window: the shot's
+ *  screen, and every capture a `becomes` swaps in on it, is rebuilt that much taller (same width, same scroll), and
+ *  the window on the stage is that much taller. A positive whole number, at most half the recorded height. */
+export type Beat = Partial<Action> & { line: number; screen?: number; window?: string | string[]; bare?: boolean; extend?: number; frame?: FrameSpec; then?: Partial<Action>[]; list?: ListSpec; bar?: BarSpec; sequence?: Sequence; moves?: MoveUse[]; cut?: CutUse; scene?: Scene };
 export type BeatsFile = {
   version: 1; title: string; viewport: Size;
   /** the film's stage (a scene may name its own; a shot has the film's): a tone, or a named stage and its inputs
@@ -97,7 +104,9 @@ export type BeatsFile = {
   end?: { move: 'logo-lift'; from: string }
     /** `end-glyph`: a hard cut to the element `glyph` (of the last shot's screen) alone in the middle of the stage, its
      *  parts sliding apart and back, and the brand's mark comes up out of it as the end card sets */
-    | { move: 'end-glyph'; glyph: string };
+    | { move: 'end-glyph'; glyph: string }
+    /** `fade`: the last shot holds where it is (no camera or window motion for its exit) and fades out as the end card sets */
+    | { move: 'fade' };
   /** how the film opens, when not on the title alone: `title-makes-room`: the first screen is there from the first
    *  frame and slides aside for the title; `cut-to-screen`: no title, the first screen already placed */
   open?: { move: Open };
@@ -167,7 +176,7 @@ const beside = (b: Box) => ({ x: b.x + b.w + 22, y: b.y + b.h * 0.55 });
 
 type Act = Partial<Action> & { beat: number; line: number; shot: number; first: boolean };
 /** `later`: the captures the shot's screen becomes, in beat order (a `becomes`; a `sequence`'s last) */
-type ShotPlan = { screen: number; window?: string[]; bare?: boolean; beats: number[]; frames: { beat: number; spec: FrameSpec }[]; later: { beat: number; screen: number }[]; scene?: Scene; cut?: { use: CutUse; beat: number } };
+type ShotPlan = { screen: number; window?: string[]; bare?: boolean; extend?: number; beats: number[]; frames: { beat: number; spec: FrameSpec }[]; later: { beat: number; screen: number }[]; scene?: Scene; cut?: { use: CutUse; beat: number } };
 type Changed = { change: Change; beat: number; shot: number; cue?: Cue };
 /** What a windowed shot's window holds: the named nodes' full boxes together (measured unclipped). */
 const contentOf = (shot: ShotPlan, boxes: Boxes): Box => union(...shot.window!.map((name) => plainBox(boxes[name])));
@@ -209,6 +218,13 @@ function read(file: BeatsFile, boxes: Boxes) {
     if (panes.length && shot.beats.length > 1) throw new Error(`beats: line ${b.line}: window goes on the first beat of its shot`);
     if (panes.length) shot.window = panes;
     if (b.bare) { if (!panes.length) throw new Error(`beats: line ${b.line}: bare goes with window on the first beat of its shot`); shot.bare = true; }
+    if (b.extend != null) {
+      const h = (file.viewports?.[screen] ?? file.viewport).height;
+      if (shot.beats.length > 1) throw new Error(`beats: line ${b.line}: extend goes on the first beat of its shot`);
+      if (shot.scene || panes.length) throw new Error(`beats: line ${b.line}: extend is for a whole screen, not a scene or a windowed shot`);
+      if (!Number.isInteger(b.extend) || b.extend <= 0 || b.extend > h / 2) throw new Error(`beats: line ${b.line}: extend is a whole number of px, 1 to ${Math.floor(h / 2)} (half the recorded height)`);
+      shot.extend = b.extend;
+    }
     need(b.frame?.target, `beat ${i}'s frame`);
     for (const name of b.frame?.targets ?? []) need(name, `beat ${i}'s frame`);
     if (!shot.frames.length) shot.frames.push({ beat: i, spec: b.frame ?? { whole: true } });
@@ -227,8 +243,11 @@ function read(file: BeatsFile, boxes: Boxes) {
         if (!Number.isInteger(c.screen)) throw new Error(`beats: line ${b.line}: becomes names a screen number`);
         need(c.after, `beat ${i}'s change`);
         for (const name of c.grows ?? []) need(name, `beat ${i}'s change`);
+        if (c.anchor != null && !(Array.isArray(c.anchor) && c.anchor.length === 2 && c.anchor.every((n) => typeof n === 'string'))) throw new Error(`beats: line ${b.line}: a becomes' anchor is [a name on the capture before, a name on the new one]`);
+        for (const name of c.anchor ?? []) need(name, `beat ${i}'s anchor`);
+        if (c.anchor && boxes[c.anchor[1]].screen !== c.screen) throw new Error(`beats: line ${b.line}: the anchor's second name is on screen ${boxes[c.anchor[1]].screen}, not the new capture (${c.screen})`);
         shot.later.push({ beat: i, screen: c.screen });
-      } else if (c.kind !== 'page' && c.kind !== 'frame-back') { need(c.node, `beat ${i}'s change`); if (c.kind === 'opens' || c.kind === 'hover') need(c.after, `beat ${i}'s change`); }
+      } else if (c.kind !== 'page' && c.kind !== 'frame-back') { need(c.node, `beat ${i}'s change`); if (c.kind === 'opens' || c.kind === 'hover') need(c.after, `beat ${i}'s change`); if (c.kind === 'opens' && c.unhide != null && typeof c.unhide !== 'boolean') throw new Error(`beats: line ${b.line}: an opens' unhide is true or false`); }
       changes.push({ change: c, beat: i, shot: s, cue });
     }
     if (b.list) lists.push({ spec: b.list, beat: i, line: b.line, shot: s });
@@ -261,6 +280,23 @@ export function screensShown(file: Pick<BeatsFile, 'beats'>, all?: number[]): nu
   return [...out].sort((a, b) => a - b);
 }
 const watchedOf = (q: Sequence, all?: number[]) => { const to = q.watch ?? q.from; return all ? all.filter((i) => i >= q.from && i <= to) : Array.from({ length: to - q.from + 1 }, (_, k) => q.from + k); };
+
+/** screen -> px: how much taller each screen is rebuilt (a shot's `extend`: its screen and what it `becomes`). One
+ *  screen has one layout, so every shot that shows it must ask for the same (tools/measure-boxes.mjs `extendsIn` reads
+ *  the beat file the same way, for Measure, Probe and the sweep). */
+function extendsOf(shots: ShotPlan[], changes: Changed[], boxes: Boxes): Record<number, number> {
+  const shows = shots.map((shot, s) => {
+    if (shot.scene) return [];
+    const own = [shot.screen, ...changes.filter((c) => c.shot === s && c.change.kind === 'becomes').map((c) => (c.change as Change & { kind: 'becomes' }).screen)];
+    // (and the capture an `opens` draws as a layer: a node measured on a screen the shot does not show)
+    const layers = changes.filter((c) => c.shot === s && c.change.kind === 'opens').map((c) => boxes[(c.change as Change & { kind: 'opens' }).node]?.screen).filter((x): x is number => x != null && !own.includes(x));
+    return [...new Set([...own, ...layers])];
+  });
+  const out: Record<number, number> = {};
+  shots.forEach((shot, s) => { if (shot.extend) for (const i of shows[s]) out[i] = shot.extend; });
+  shots.forEach((shot, s) => { for (const i of shows[s]) if ((out[i] ?? 0) !== (shot.extend ?? 0)) throw new Error(`beats: screen ${i} is shown with extend ${out[i] ?? 0} on one shot and ${shot.extend ?? 0} on another: one screen has one layout`); });
+  return out;
+}
 
 /** Every authored string a beat file puts on the frames outside a list (a bar's title, address and bookmarks; the
  *  text a `fills` draws into a field; what a library move or a one-off says it shows: its `text(inputs)`), for the
@@ -396,7 +432,11 @@ function runsOf(notes: string[]): string[] {
 export function makeBeats(file: BeatsFile, boxes: Boxes, timing: Timing, layout?: Layout, hasIcon?: (name: string) => boolean, built = false, moveOf?: MoveOf) {
   const fps = timing.fps, F = (s: number) => Math.round(s * fps), R = (x: number) => Math.round(x * fps) / fps;
   const S = timing.sentences, close = closeOf(timing, built), faults: string[] = [];
-  const { shots, acts, changes, lists: listed, bars, runs, uses } = read(file, boxes), windowOf = windowsOf(file, shots, boxes);
+  const { shots, acts, changes, lists: listed, bars, runs, uses } = read(file, boxes);
+  // a shot that shows more of the page below its window (`extend`): its screens are that much taller, for everything after
+  const extended = extendsOf(shots, changes, boxes);
+  if (Object.keys(extended).length) file = { ...file, viewports: { ...file.viewports, ...Object.fromEntries(Object.entries(extended).map(([s, px]) => { const vp = file.viewports?.[+s] ?? file.viewport; return [s, { width: vp.width, height: vp.height + px }]; })) } };
+  const windowOf = windowsOf(file, shots, boxes);
   const vpOf = (s: number): Size => file.viewports?.[shots[s].screen] ?? file.viewport;
   const around = aroundOf(shots, acts, changes, boxes, layout, windowOf);
   for (const b of file.beats) if (!S[b.line]) throw new Error(`beats: line ${b.line} is not in the timing (${S.length} lines)`);
@@ -463,7 +503,9 @@ export function makeBeats(file: BeatsFile, boxes: Boxes, timing: Timing, layout?
   const cutDur = (s: number) => cutPlays.find((c) => c.shot === s)?.dur ?? 0;
   /** an end on a glyph: the last shot is cut away this long before its window would have left (close.ts GLYPH) */
   const glyphAt = file.end?.move === 'end-glyph' ? R(close.windowOut - GLYPH.lead) : null;
-  const ends = shots.map((_, s) => (s + 1 < shots.length ? cuts[s + 1] + cutDur(s + 1) : glyphAt ?? close.endCard));
+  /** an end that fades: the last shot is on until its fade is done (close.ts FADE), over the end card as it sets */
+  const fades = file.end?.move === 'fade';
+  const ends = shots.map((_, s) => (s + 1 < shots.length ? cuts[s + 1] + cutDur(s + 1) : glyphAt ?? (fades ? R(close.endCard + FADE.lag) : close.endCard)));
   // ── library moves and one-offs: each from its cue (else its line's start) to its cue (else the line's end, or as long as it takes) ──
   const plays = uses.map(({ use, line, shot }) => {
     const { move: name, at, until, ...inputs } = use, mod = moveOf?.(name);
@@ -485,13 +527,16 @@ export function makeBeats(file: BeatsFile, boxes: Boxes, timing: Timing, layout?
   const cued = (c: Changed) => (c.cue != null ? said(file.beats[c.beat].line, c.cue) : S[file.beats[c.beat].line].start);
 
   // ── the captures each shot shows, in time: its own, then whatever it becomes (a `becomes`, a `sequence`) ──
-  const shown = shots.map((shot, s) => [{ at: cuts[s], screen: shot.screen }]);
+  const shown: { at: number; screen: number; pageY?: number }[][] = shots.map((shot, s) => [{ at: cuts[s], screen: shot.screen }]);
   const becameAt = new Map<Change, number>();
   for (const c of changes) {
     if (c.change.kind !== 'becomes') continue;
     const after = swapAfter(file, c.change), at = c.change.after ? (clickOn(c.change.after) ?? cued(c)) + after : c.cue != null ? cued(c) + after : cued(c);
     becameAt.set(c.change, Math.round(at * fps) / fps);
-    shown[c.shot].push({ at, screen: c.change.screen });
+    // (an anchored capture is scrolled as Measure scrolled it, so its element stays where it was: a whole screen only)
+    const anchor = c.change.anchor;
+    if (anchor && shots[c.shot].window) faults.push(`line ${file.beats[c.beat].line}: a becomes' anchor is for a whole screen, not a windowed shot`);
+    shown[c.shot].push({ at, screen: c.change.screen, ...(anchor && !shots[c.shot].window && boxes[anchor[1]].pageY != null ? { pageY: boxes[anchor[1]].pageY } : {}) });
   }
   const takenAt = (i: number) => file.screens?.find((x) => x.i === i)?.t;
   for (const r of runs) {
@@ -542,8 +587,8 @@ export function makeBeats(file: BeatsFile, boxes: Boxes, timing: Timing, layout?
   // ── the end: a logo lift pushes toward a named element of the last shot's screen ──
   // (or on a glyph: a hard cut to one element of that screen alone)
   const lift = file.end?.move === 'logo-lift' ? file.end.from : null, glyph = file.end?.move === 'end-glyph' ? file.end.glyph : null, ended = lift ?? glyph;
-  if (file.end) {
-    if (typeof ended !== 'string') throw new Error('beats: end is { move: "logo-lift", from: a name in `nodes` } or { move: "end-glyph", glyph: a name in `nodes` }');
+  if (file.end && !fades) {
+    if (typeof ended !== 'string') throw new Error('beats: end is { move: "logo-lift", from: a name in `nodes` } or { move: "end-glyph", glyph: a name in `nodes` } or { move: "fade" }');
     if (!boxes[ended]) throw new Error(`beats: end names "${ended}", which has no measured box`);
     if (shots.at(-1)!.scene || shots.at(-1)!.window) throw new Error(`beats: ${lift ? 'a logo lift' : 'an end glyph'} ends on a whole screen: the film's last shot is a scene or a windowed shot`);
     if (glyph && boxes[glyph].screen !== screenAt(shots.length - 1, glyphAt!)) throw new Error(`beats: end names "${glyph}", which is not on the screen the film ends on (screen ${screenAt(shots.length - 1, glyphAt!)})`);
@@ -623,6 +668,15 @@ export function makeBeats(file: BeatsFile, boxes: Boxes, timing: Timing, layout?
     // where the push toward the logo starts
     const lifts = !!lift && s === shots.length - 1;
     const end = s + 1 < shots.length ? ends[s] : lifts ? close.windowOut - LIFT.lead : close.endCard + 0.1, last = rest.at(-1)!;
+    // (an end that fades: the hold drifts as ever until the window would have left, then the camera stands still to the end of the fade)
+    if (fades && s === shots.length - 1) {
+      const still = Math.max(F(close.windowOut), keys.at(-1)!.frame);
+      // (`hold`: the camera's rule lets it stand still from this key on)
+      if (still > keys.at(-1)!.frame) keys.push({ frame: still, box: last.box, fill: drift(last.fill, still / fps - at), ease: 'linear', hold: true });
+      else keys[keys.length - 1] = { ...keys.at(-1)!, hold: true };
+      keys.push({ frame: Math.max(F(ends[s]), still + 1), box: keys.at(-1)!.box, fill: keys.at(-1)!.fill, ease: 'linear', hold: true });
+      return keys;
+    }
     if (!lifts) { if (F(end) > keys.at(-1)!.frame) keys.push({ frame: F(end), box: last.box, fill: drift(last.fill, end - at), ease: 'linear', ...mark }); return keys; }
     // One heavy push toward the logo, arriving as the end card starts to set: it is framed at LIFT_FILL of the
     // frame's width, or as near to that as the camera's own rule (cameraFaults) allows: a small logo is not gone in
@@ -668,6 +722,9 @@ export function makeBeats(file: BeatsFile, boxes: Boxes, timing: Timing, layout?
   const on = (s: number, p: { x: number; y: number }): Stop => (frame) => project(cameraAt(ordered[s], frame, FRAME), scrolls[s].length ? { x: p.x, y: p.y - scrollAt(scrolls[s], frame / fps) } : p, FRAME);
   const moves: Move[] = [], begins: number[] = [], drags: NonNullable<Beats['drags']> = [];
   let prev: Stop = () => OFF, shotBefore = 0;
+  /** a film whose first beat has no cursor (its line is context): the cursor waits for the first beat that has one
+   *  (an `enter`, or an action), and comes on at its line's start, not before: that beat's shot and second */
+  const waits = acts.length && acts[0].beat > 0 && !shots[0].scene && !shots[acts[0].shot].scene ? { shot: acts[0].shot, start: S[acts[0].line].start } : null;
   /** what a waiting cursor must not sit on in shot s at second t: the text, icons and fields of the capture then
    *  showing, less whatever has not opened yet */
   const inkAt = (s: number, t: number) => {
@@ -710,12 +767,14 @@ export function makeBeats(file: BeatsFile, boxes: Boxes, timing: Timing, layout?
     // no cursor while a list is up: when one comes before the cursor's first action, the cursor does not come on
     // early to rest; its entrance waits until the list has cleared
     const wall = moves.length ? -Infinity : Math.max(-Infinity, ...lists.filter((l) => l.blurIn < a.t).map((l) => l.clear));
-    if (!moves.length && scene < 0 && wall === -Infinity && unaided > F(settled + ENTER_BY + 1)) {
-      const from = F(settled + ENTER_BY - 1.1), at = F(settled + ENTER_BY), ink = inkAt(0, settled);
-      const w0 = windowOf(0), want = { x: w0.x + ENTER_REST.x * w0.w, y: w0.y + ENTER_REST.y * w0.h };
-      const rest = on(0, ink.length ? clearNear(want, ink, w0, under(0, at, want).k) : want);
+    // (a cursor that waits comes on from the start of its first beat's line, to rest in that beat's shot)
+    const es = waits ? waits.shot : 0, entry = waits ? waits.start + 1.1 : settled + ENTER_BY;
+    if (!moves.length && scene < 0 && wall === -Infinity && unaided > F(entry + 1)) {
+      const from = F(entry - 1.1), at = F(entry), ink = inkAt(es, waits ? waits.start : settled);
+      const w0 = windowOf(es), want = { x: w0.x + ENTER_REST.x * w0.w, y: w0.y + ENTER_REST.y * w0.h };
+      const rest = on(es, ink.length ? clearNear(want, ink, w0, under(es, at, want).k) : want);
       moves.push({ from, to: at, stop: rest, bow: 0.1 });
-      prev = rest;
+      prev = rest; shotBefore = es;
     }
     // across a scene the cursor is off the frame: it leaves before the scene, and comes on again for this action
     if (scene >= 0) { if (moves.length) leaveFor(scene); shotBefore = a.shot; }
@@ -743,7 +802,7 @@ export function makeBeats(file: BeatsFile, boxes: Boxes, timing: Timing, layout?
     if (first && starts.has(a.beat)) from = clamp(F(starts.get(a.beat)! + 0.2), to - 3 * fps, from);
     // a `move` does not stop where the cursor was: it leaves at once and glides on, reaching its target on its cue
     if (a.cursor === 'move' && moves.length) from = Math.max(last + 3, to - Math.round(2.4 * fps));
-    from = Math.max(from, last + 2, F(wall), first ? F(roomBack) : -Infinity);
+    from = Math.max(from, last + 2, F(wall), first ? F(roomBack) : -Infinity, first && waits ? F(waits.start) : -Infinity);
     if (scene >= 0 || (a.shot > 0 && cutDur(a.shot))) from =Math.max(from, F(cuts[a.shot] + cutDur(a.shot)) + 2);   // not before its screen is up, nor while a cut move is bringing it
     if (wall > -Infinity && to - from < fps / 2) faults.push(`line ${a.line}: after the list the cursor has ${to - from} frames to come on and reach "${a.target}"`);
     else if (to - from < 6) faults.push(`line ${a.line}: the cursor has ${to - from} frames to reach "${a.target}"`);
@@ -799,7 +858,9 @@ export function makeBeats(file: BeatsFile, boxes: Boxes, timing: Timing, layout?
     const from = anchor && anchor.node < 0 ? ARRIVES[bar?.spec.arrives ?? 'down'] :anchor && Math.abs(b.y - (anchor.y + anchor.h)) <= 8 ? 'top' as const : 'centre' as const;
     // (what is only there once the screen has become its next capture opens when that capture comes)
     const born = mine(s, 'becomes').find((x) => x.change.screen === b.screen);
-    return { node: b.node, at: Math.max(opensAt(c, beat) + (from === 'top' ? 0.05 : 0.06), born ? becameAt.get(born.change)! : -Infinity), from };
+    // (a node of a capture the shot never shows, a later one of the same page: drawn as a layer over the page, no swap)
+    const layer = shown[s].some((x) => x.screen === b.screen) ? undefined : b.screen;
+    return { node: b.node, at: Math.max(opensAt(c, beat) + (from === 'top' ? 0.05 : 0.06), born ? becameAt.get(born.change)! : -Infinity), from: layer != null ? 'centre' as const : from, ...(c.unhide ? { unhide: true } : {}), ...(layer != null ? { layer } : {}) };
   });
   /** what closes on shot s: it goes the way the open of the same node on the shot had it come (else as a dialog), and
    *  stays shut until that node's next open (else for good) */
@@ -848,6 +909,24 @@ export function makeBeats(file: BeatsFile, boxes: Boxes, timing: Timing, layout?
     }),
   }));
 
+  // ── layers: what an `opens` brings from a capture the shot does not show (a dialog the app filled later): that
+  // capture rebuilt with only the dialog's fixed layer and backdrop, over the page, under the same camera. Its open
+  // (and close) are staged on the layer, not on the page (whose copy of the node is an empty shell, or nothing) ──
+  const layers = shots.map((shot, s) => {
+    const st = staging[s], up = st.opens.filter((o) => (o as { layer?: number }).layer != null) as (Staging['opens'][number] & { layer: number })[];
+    if (!up.length) return undefined;
+    if (shot.window || bar?.shot === s) faults.push(`screen ${shot.screen} (shot ${s}): an opens of a node on another capture draws a layer over a whole screen only (not a windowed shot, nor one with a bar)`);
+    const ids = new Set(up.map((o) => o.node)), closes = (st.closes ?? []).filter((c) => ids.has(c.node));
+    st.opens = st.opens.filter((o) => (o as { layer?: number }).layer == null);
+    if (st.closes) st.closes = st.closes.filter((c) => !ids.has(c.node));
+    return [...new Set(up.map((o) => o.layer))].map((screen) => {
+      // (in a layer the whole panel moves: whatever of the dialog's layer holds the node and is not the window-wide host: changes.ts `panelOf`)
+      const opens = up.filter((o) => o.layer === screen).map(({ layer: _l, ...o }) => ({ ...o, panel: true })), mineCloses = closes.filter((c) => opens.some((o) => o.node === c.node)).map((c) => ({ ...c, panel: true }));
+      return { screen, nodes: opens.map((o) => o.node), from: R(Math.min(...opens.map((o) => o.at)) - 0.05),
+        staging: { opens, ...(mineCloses.length ? { closes: mineCloses } : {}), presses: st.presses, ...(st.hovers ? { hovers: st.hovers } : {}), selects: st.selects, ...(st.fills ? { fills: st.fills } : {}) } };
+    });
+  });
+
   // ── a bare shot's window frame coming back (seconds), where one is asked for ──
   const frameBack = shots.map((shot, s) => {
     const back = mine(s, 'frame-back')[0];
@@ -856,7 +935,7 @@ export function makeBeats(file: BeatsFile, boxes: Boxes, timing: Timing, layout?
   });
   const beats: Beats = {
     openLeave, ...(open ? { open } : {}),
-    shots: shots.map((shot, s) => ({ screen: shot.screen, from: cuts[s], to: ends[s], camera: ordered[s], staging: staging[s],
+    shots: shots.map((shot, s) => ({ screen: shot.screen, from: cuts[s], to: ends[s], camera: ordered[s], staging: staging[s], ...(layers[s] ? { layers: layers[s] } : {}),
       ...(shot.scene ? { scene: shot.scene } : {}),
       ...(shown[s].length > 1 ? { screens: shown[s] } : {}),
       ...(bar?.shot === s ? { bar: { spec: bar.spec, viewport: vpOf(s), play: bar.play, click: bar.click != null ? { at: bar.click, until: hover(bar.click) } : null } } : {}),
@@ -870,6 +949,8 @@ export function makeBeats(file: BeatsFile, boxes: Boxes, timing: Timing, layout?
     // (an end glyph: which element, when the cut to it comes, and where it stands: GLYPH.size of the frame's width, less when it is tall, in the middle)
     ...(glyph ? { glyph: (() => { const b = raised(plainBox(boxes[glyph]), endUp), w = Math.min(GLYPH.size * FRAME.width, (GLYPH.tall * FRAME.height * b.w) / b.h), h = (w * b.h) / b.w;
       return { screen: boxes[glyph].screen, node: boxes[glyph].node, box: b, at: glyphAt!, rest: { x: (FRAME.width - w) / 2, y: (FRAME.height - h) / 2, w, h } }; })() } : {}),
+    ...(fades ? { fade: true } : {}),
+    ...(Object.keys(extended).length ? { extends: extended } : {}),
     ...(lift ? { lift: { from: (() => { const b = raised(plainBox(boxes[lift]), endUp), cam = cameraAt(ordered.at(-1)!, F(close.endCard), FRAME), p = project(cam, b, FRAME); return { x: p.x, y: p.y, w: b.w * cam.s, h: b.h * cam.s }; })() } } : {}),
   };
   const frames = Math.ceil(close.total * fps);

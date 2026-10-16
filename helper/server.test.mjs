@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { writeTutorial } from './tutorial.mjs';
 import { EXTENSION_ID } from './extension-id.mjs';
-import { STAGE_FILES, applyBrand, brandFile, resolveBrand } from './pipeline.mjs';
+import { STAGE_FILES, applyBrand, brandFile, filmName, resolveBrand } from './pipeline.mjs';
 import { paths } from '../tools/paths.mjs';
 import { CLIPS, IMAGES } from '../film/src/kit/media.ts';
 import { withHelper, fakeRunner, record } from './test-helpers.mjs';
@@ -106,8 +106,8 @@ test('state route: an event with a title; an unknown event, a helper-only event 
   record(home, 'rec-1');
   const r = await post('/tutorials/rec-1/state', { event: 'scripted', title: '  Find your key\n' });
   assert.equal(r.status, 200);
-  assert.deepEqual([r.json.state, r.json.title], ['scripted', 'Find your key']);
-  assert.equal(JSON.parse(fs.readFileSync(path.join(home, 'rec-1', 'tutorial.json'), 'utf8')).state, 'scripted');
+  assert.deepEqual([r.json.state, r.json.title, r.json.id, r.json.dir], ['scripted', 'Find your key', 'rec-1', path.join(home, 'Find your key')]); // the folder takes the title
+  assert.equal(JSON.parse(fs.readFileSync(path.join(home, 'Find your key', 'tutorial.json'), 'utf8')).state, 'scripted');
   const unknown = await post('/tutorials/rec-1/state', { event: 'publish' });
   assert.deepEqual([unknown.status, unknown.json.error], [400, 'unknown event publish']);
   assert.equal((await post('/tutorials/rec-1/state', { event: 'voiced' })).status, 400);           // only a narration that compares well does that
@@ -306,6 +306,13 @@ test('rules: a blind rule is written, the scrub runs again, and the answer is th
       assert.equal((await post('/tutorials/rec-1/rules', bad)).status, 400, JSON.stringify(bad));
     }
     assert.equal((await post('/tutorials/rec-1/rules', '{"keep":["' + 'x'.repeat(300 * 1024) + '"]}')).status, 413);
+    // a fill naming one node on one screen: a later one for the same screen + node replaces it
+    for (const bad of [{ fill: [{ screen: 0, node: 8 }] }, { fill: [{ screen: '0', node: 8, value: 'Acme' }] }, { fill: [{ screen: 0, node: 8, selector: '#x', value: 'Acme' }] }]) {
+      assert.equal((await post('/tutorials/rec-1/rules', bad)).status, 400, JSON.stringify(bad));
+    }
+    assert.equal((await post('/tutorials/rec-1/rules', { fill: [{ screen: 0, node: 8, value: 'Acme' }, { screen: 1, node: 8, value: 'Acme' }] })).status, 200);
+    assert.equal((await post('/tutorials/rec-1/rules', { fill: [{ screen: 0, node: 8, value: 'Dana Reyes' }] })).status, 200);
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, 'rules.json'), 'utf8')).fill, [{ screen: 1, node: 8, value: 'Acme' }, { screen: 0, node: 8, value: 'Dana Reyes' }]);
     // confirmed interface text: an entry must name an element of its screen; it is written, and nothing is scrubbed again
     fs.writeFileSync(path.join(dir, 'film', 'clean', 'screen-0.json'), JSON.stringify({ node: { type: 0, id: 1, childNodes: [{ type: 2, id: 2, tagName: 'body', attributes: {}, childNodes: [{ type: 2, id: 5, tagName: 'label', attributes: {}, childNodes: [{ type: 3, id: 6, textContent: 'Amount' }] }] }] } }));
     ran.length = 0;
@@ -469,8 +476,7 @@ async function approved(home, post) {
   const dir = record(home, 'rec-1');
   fs.writeFileSync(path.join(dir, 'script.md'), SCRIPT);
   await post('/tutorials/rec-1/state', { event: 'scripted', title: 'Copy your key' });
-  await post('/tutorials/rec-1/state', { event: 'approved' });
-  return dir;
+  return (await post('/tutorials/rec-1/state', { event: 'approved' })).json.dir; // named after its title now
 }
 const audio = (post, body = Buffer.from('ID3 not really audio'), type = 'audio/mpeg') => post('/tutorials/rec-1/narration', body, { 'content-type': type });
 
@@ -613,11 +619,11 @@ test('a brand\'s own stage: its picture or clip is copied with the brand, and on
 
 /** a voiced tutorial with a beat file */
 async function voiced(home, srv, post) {
-  const dir = record(home, 'rec-1');
+  let dir = record(home, 'rec-1');
   fs.writeFileSync(path.join(dir, 'script.md'), SCRIPT);
   await post('/tutorials/rec-1/prepare');
   await srv.idle('rec-1');
-  await post('/tutorials/rec-1/state', { event: 'scripted', title: 'Copy your key' });
+  dir = (await post('/tutorials/rec-1/state', { event: 'scripted', title: 'Copy your key' })).json.dir;
   await post('/tutorials/rec-1/state', { event: 'approved' });
   await audio(post);
   await srv.idle('rec-1');
@@ -628,12 +634,12 @@ async function voiced(home, srv, post) {
 test('build: measure (and time again), stills, sweep, then render to the next free name; the first render makes it built', async () => {
   const ran = [];
   await withHelper({ runner: fakeRunner({ whisper: heard(AS_WRITTEN) }, ran) }, async ({ home, srv, post, get }) => {
-    const dir = record(home, 'rec-1');
+    let dir = record(home, 'rec-1');
     fs.writeFileSync(path.join(dir, 'script.md'), SCRIPT);
     await post('/tutorials/rec-1/prepare');
     await srv.idle('rec-1');
     for (const what of ['measure', 'sweep', 'render']) assert.equal((await post(`/tutorials/rec-1/${what}`)).status, 409, what); // recorded: nothing to build
-    await post('/tutorials/rec-1/state', { event: 'scripted', title: 'Copy your key' });
+    dir = (await post('/tutorials/rec-1/state', { event: 'scripted', title: 'Copy your key' })).json.dir;
     await post('/tutorials/rec-1/state', { event: 'approved' });
     await audio(post);
     await srv.idle('rec-1');
@@ -713,7 +719,7 @@ test('prepare and render write their phases; render takes its fraction from the 
     assert.ok(['scrub', 'gestures', 'transcribe'].includes(during.progress?.phase ?? 'scrub'));
     await srv.idle('rec-1');
     assert.equal((await get('/tutorials/rec-1')).json.progress, null);
-    await post('/tutorials/rec-1/state', { event: 'scripted', title: 'T' });
+    dir = (await post('/tutorials/rec-1/state', { event: 'scripted', title: 'T' })).json.dir;
     await post('/tutorials/rec-1/state', { event: 'approved' });
     await audio(post);
     await srv.idle('rec-1');
@@ -786,8 +792,8 @@ test('nothing the helper sends can be put in a frame: the headers are on every k
 // ── the review player, as it is, per tutorial ──
 
 test('the review page sends notes (a request the panel drains) and approves (the reviewed event)', () => withHelper({}, async ({ home, base, post, get, call }) => {
-  const dir = record(home, 'rec-1');
-  for (const event of [['scripted', 'T'], ['approved']]) await post('/tutorials/rec-1/state', { event: event[0], ...(event[1] ? { title: event[1] } : {}) });
+  let dir = record(home, 'rec-1');
+  for (const event of [['scripted', 'T'], ['approved']]) dir = (await post('/tutorials/rec-1/state', { event: event[0], ...(event[1] ? { title: event[1] } : {}) })).json.dir;
   fs.writeFileSync(path.join(dir, 'tutorial.json'), JSON.stringify({ ...(await get('/tutorials/rec-1')).json, state: 'built', renders: ['v1.mp4'] }));
   const own = { origin: `http://127.0.0.1:${new URL(base).port}` };
   const sent = await call('POST', '/review/rec-1/api/send', null, own);
@@ -807,6 +813,39 @@ test('the review page sends notes (a request the panel drains) and approves (the
   await call('DELETE', '/tutorials/rec-1');
   assert.deepEqual((await get('/tutorials')).json.requests, []);
 }));
+
+test('approved: the newest render is saved under the tutorial\'s title; a new title replaces the old file; no render, no file', () => withHelper({}, async ({ home, base, post, get, call }) => {
+  let dir = record(home, 'rec-1'), own = { origin: `http://127.0.0.1:${new URL(base).port}` };
+  dir = (await post('/tutorials/rec-1/state', { event: 'scripted', title: 'Find a payee\'s <signed>: ACH/auth?  ' })).json.dir;
+  assert.equal(dir, path.join(home, 'Find a payee\'s signed ACHauth'));
+  await post('/tutorials/rec-1/state', { event: 'approved' });
+  const built = (renders) => fs.writeFileSync(path.join(dir, 'tutorial.json'), JSON.stringify({ ...JSON.parse(fs.readFileSync(path.join(dir, 'tutorial.json'), 'utf8')), state: 'built', renders }));
+  built([]);                                                                         // no render: approved, nothing saved
+  assert.deepEqual([(await call('POST', '/review/rec-1/api/approve', null, own)).json.exported, fs.readdirSync(dir).filter((f) => f.endsWith('.mp4'))], [null, []]);
+  await post('/tutorials/rec-1/state', { event: 'notes' });
+  fs.mkdirSync(path.join(dir, 'out'));
+  fs.writeFileSync(path.join(dir, 'out', 'v1.mp4'), 'one'); fs.writeFileSync(path.join(dir, 'out', 'v2.mp4'), 'two');
+  built(['v1.mp4', 'v2.mp4']);
+  const ok = await call('POST', '/review/rec-1/api/approve', null, own);
+  const name = 'Find a payee\'s signed ACHauth.mp4';                                 // <>:"/\|?* gone, spaces collapsed and trimmed
+  assert.deepEqual([ok.status, ok.json.exported, fs.readFileSync(path.join(dir, name), 'utf8')], [200, name, 'two']);
+  assert.equal((await get('/review/rec-1/api/tutorial')).json.exported, name);
+  assert.deepEqual(fs.readdirSync(path.join(dir, 'out')).sort(), ['v1.mp4', 'v2.mp4']); // out/ untouched: the next render is still v3
+  // renamed and approved again (the state route this time): the old file goes, the new one holds the newest render
+  dir = (await post('/tutorials/rec-1/state', { event: 'notes', title: 'Signed ACH' })).json.dir; // the folder moves with the title, the film in it
+  assert.deepEqual([dir, fs.readdirSync(dir).filter((f) => f.endsWith('.mp4'))], [path.join(home, 'Signed ACH'), [name]]);
+  fs.writeFileSync(path.join(dir, 'out', 'v3.mp4'), 'three'); built(['v1.mp4', 'v2.mp4', 'v3.mp4']);
+  assert.equal((await post('/tutorials/rec-1/state', { event: 'reviewed' })).json.exported, 'Signed ACH.mp4');
+  assert.deepEqual(fs.readdirSync(dir).filter((f) => f.endsWith('.mp4')), ['Signed ACH.mp4']);
+  assert.equal(fs.readFileSync(path.join(dir, 'Signed ACH.mp4'), 'utf8'), 'three');
+}));
+
+test('a film\'s file name: the title made safe, else the id', () => {
+  const name = (title) => filmName({ id: 'rec-1', title });
+  assert.equal(name('  a\tb\u0001 c. . '), 'a b c.mp4');
+  assert.equal(name('x'.repeat(200)), 'x'.repeat(120) + '.mp4');
+  for (const t of [null, '', '<>?*', 'CON', 'nul']) assert.equal(name(t), 'rec-1.mp4');
+});
 
 test('the review player is served per tutorial: videos from out/ only, notes into review/', () => withHelper({}, async ({ home, base, get, call }) => {
   const dir = record(home, 'rec-1');
@@ -867,8 +906,8 @@ test('delete moves the tutorial whole into .trash, never removes it; restore bri
   for (const headers of [own, { origin: RECORDER }, { origin: 'https://evil.test' }]) assert.equal((await post('/tutorials/rec-1/restore', null, headers)).status, 403);
   assert.equal((await post('/tutorials/rec-2/restore')).status, 404);
   const back = await post('/tutorials/rec-1/restore');
-  assert.deepEqual([back.status, back.json.id, back.json.title], [200, 'rec-1', 'The later one']); // the newest copy
-  assert.ok(fs.existsSync(path.join(dir, 'recording', 'events.ndjson')));
+  assert.deepEqual([back.status, back.json.id, back.json.title, back.json.dir], [200, 'rec-1', 'The later one', path.join(home, 'The later one')]); // the newest copy, under its title
+  assert.ok(fs.existsSync(path.join(back.json.dir, 'recording', 'events.ndjson')) && !fs.existsSync(dir));
   assert.deepEqual((await get('/tutorials')).json.tutorials.map((t) => t.id), ['rec-1']);
   assert.equal((await post('/tutorials/rec-1/restore')).status, 409);
   assert.deepEqual((await get('/tutorials')).json.trashed.map((t) => t.name), ['Reset a password']);
@@ -931,3 +970,85 @@ test('a helper of this copy of the plugin: setup is in the list, and names nothi
   assert.deepEqual(setup.steps.find((s) => s.name === 'deps'), { name: 'deps', done: true, what: 'the video engine (npm packages, about 650 MB on disk)' });
   assert.equal(setup.running, false);
 }));
+
+// ── a tutorial's folder is named after its title (helper/server.mjs nameFolder); its id stays the recording's name ──
+const folders = (home) => fs.readdirSync(home).filter((f) => !f.startsWith('.')).sort();
+
+test('folder names: a title names the folder, a rename moves it again, a clash gets " (2)", an untitled one keeps its name', () => withHelper({}, async ({ home, base, post, get, call }) => {
+  record(home, 'rec-1'); record(home, 'rec-2'); record(home, 'rec-3');
+  const titled = await post('/tutorials/rec-1/state', { event: 'scripted', title: 'Find a payee\'s signed ACH authorization' });
+  assert.deepEqual([titled.status, titled.json.id, titled.json.dir], [200, 'rec-1', path.join(home, 'Find a payee\'s signed ACH authorization')]);
+  assert.deepEqual(folders(home), ['Find a payee\'s signed ACH authorization', 'rec-2', 'rec-3']);
+  // the same title on another tutorial: " (2)"; asked again, it stays where it is (not " (3)")
+  assert.equal((await post('/tutorials/rec-2/state', { title: 'Find a payee\'s signed ACH authorization' })).json.dir, path.join(home, 'Find a payee\'s signed ACH authorization (2)'));
+  assert.equal((await post('/tutorials/rec-2/state', { title: 'Find a payee\'s signed ACH authorization' })).json.dir, path.join(home, 'Find a payee\'s signed ACH authorization (2)'));
+  // a rename moves the folder again, whole; the id does not change
+  const renamed = await post('/tutorials/rec-1/state', { title: 'Signed ACH' });
+  assert.deepEqual([renamed.json.id, renamed.json.dir], ['rec-1', path.join(home, 'Signed ACH')]);
+  assert.ok(fs.existsSync(path.join(home, 'Signed ACH', 'recording', 'events.ndjson')));
+  // a title that is no file name, or names a reserved folder, leaves it under its id
+  assert.equal((await post('/tutorials/rec-3/state', { title: 'Brands' })).json.dir, path.join(home, 'rec-3'));
+  assert.equal((await post('/tutorials/rec-3/state', { title: 'CON' })).json.dir, path.join(home, 'rec-3'));
+  assert.deepEqual(folders(home), ['Find a payee\'s signed ACH authorization (2)', 'Signed ACH', 'rec-3']);
+  // every route still answers to the id: the state, the list, the review page, the panel's requests
+  assert.deepEqual([(await get('/tutorials/rec-1')).json.dir, (await get('/tutorials/rec-1')).json.title], [path.join(home, 'Signed ACH'), 'Signed ACH']);
+  assert.deepEqual((await get('/tutorials')).json.tutorials.map((t) => t.id).sort(), ['rec-1', 'rec-2', 'rec-3']);
+  assert.ok((await get('/tutorials')).json.tutorials.every((t) => t.dir === undefined)); // the list carries ids, as before
+  const hop = await fetch(`${base}/review/?tutorial=rec-1`, { redirect: 'manual' });
+  assert.deepEqual([hop.status, hop.headers.get('location')], [302, '/review/rec-1/']);
+  assert.equal((await get('/review/rec-1/api/tutorial')).json.title, 'Signed ACH');
+  assert.equal((await post('/tutorials/rec-1/progress', { phase: 'shotlist' })).status, 200);
+  const own = { origin: `http://127.0.0.1:${new URL(base).port}` };
+  assert.equal((await call('POST', '/review/rec-1/api/send', null, own)).json.request.id, 'rec-1');
+  assert.equal((await get('/tutorials/Signed%20ACH')).status, 400); // a folder's name is not an id
+  // delete and restore by id: back under its title
+  assert.equal((await call('DELETE', '/tutorials/rec-1')).status, 200);
+  assert.match(fs.readdirSync(path.join(home, '.trash'))[0], /^rec-1-\d{13}$/);
+  assert.equal((await post('/tutorials/rec-1/restore')).json.dir, path.join(home, 'Signed ACH'));
+}));
+
+test('folder names: never while a stage runs or the recording is arriving; a held folder refuses and changes nothing', async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  await withHelper({ runner: fakeRunner({ prepare: async () => { await gate; return { code: 1 }; } }) }, async ({ home, srv, base, post, get }) => {
+    record(home, 'rec-1');
+    assert.equal((await post('/tutorials/rec-1/prepare')).status, 202);
+    const busy = await post('/tutorials/rec-1/state', { title: 'Busy now' });
+    assert.equal(busy.status, 409);
+    assert.deepEqual([folders(home), (await get('/tutorials/rec-1')).json.title], [['rec-1'], null]);
+    release(); await srv.idle('rec-1');
+    // a recording still arriving: the title is kept, the folder is left as it is (renamed at the next title or start)
+    assert.equal((await fetch(`${base}/session/rec-2/events`, { method: 'POST', body: JSON.stringify([{ type: 4, data: { href: 'https://app.site.test/' }, timestamp: 1 }]) })).status, 200);
+    const arriving = await post('/tutorials/rec-2/state', { title: 'Still arriving' });
+    assert.deepEqual([arriving.status, arriving.json.title, arriving.json.dir], [200, 'Still arriving', path.join(home, 'rec-2')]);
+  });
+  if (process.platform !== 'win32') return; // only Windows refuses to rename a folder with a file open in it
+  await withHelper({}, async ({ home, post, get }) => {
+    const dir = record(home, 'rec-1'), fd = fs.openSync(path.join(dir, 'recording', 'events.ndjson'), 'r');
+    try {
+      const held = await post('/tutorials/rec-1/state', { event: 'scripted', title: 'Held open' });
+      assert.equal(held.status, 409);
+      assert.match(held.json.error, /could not be renamed to "Held open": a file in it is open in another program\. Nothing changed/);
+      const t = (await get('/tutorials/rec-1')).json;
+      assert.deepEqual([t.state, t.title, t.dir], ['recorded', null, dir]);
+    } finally { fs.closeSync(fd); }
+    assert.equal((await post('/tutorials/rec-1/state', { event: 'scripted', title: 'Held open' })).json.dir, path.join(home, 'Held open'));
+  });
+});
+
+test('folder names: tutorials titled before are renamed when the helper starts, once', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'rt-names-'));
+  try {
+    const t = (id, title) => ({ id, title, site: '', brand: null, state: title ? 'scripted' : 'recorded', busy: null, error: null, flags: { noMic: false }, renders: [], updatedAt: 'x' });
+    writeTutorial(record(home, 'rec-1'), t('rec-1', 'Old one'));
+    writeTutorial(record(home, 'rec-2'), t('rec-2', 'Old one'));
+    writeTutorial(record(home, 'rec-3'), t('rec-3', null));
+    for (let start = 0; start < 2; start++) {
+      await withHelper({ home }, async ({ get }) => { // (`home` here is this test's folder, given to the helper)
+        assert.deepEqual(folders(home), ['Old one', 'Old one (2)', 'rec-3']);
+        assert.deepEqual((await get('/tutorials')).json.tutorials.map((x) => x.id).sort(), ['rec-1', 'rec-2', 'rec-3']);
+        assert.equal((await get('/tutorials/rec-3')).json.dir, path.join(home, 'rec-3'));
+      }); // (the second start finds every folder named right: nothing moves, no " (3)")
+    }
+  } finally { fs.rmSync(home, { recursive: true, force: true }); }
+});
